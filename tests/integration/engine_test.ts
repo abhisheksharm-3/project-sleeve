@@ -94,3 +94,93 @@ Deno.test("claim_due_jobs: concurrent callers never receive the same job", async
   assertEquals(ids.length, 8, "every job handed out exactly once");
   assertEquals(new Set(ids).size, 8, "no job handed to two callers");
 });
+
+Deno.test("reschedule_job: success resets failures and pushes next_run_at forward", async () => {
+  const db = getServiceClient();
+  await resetEngineTables(db);
+  const t = await seedTarget(db, { interval_seconds: 60 });
+  await db.from("jobs").update({
+    consecutive_failures: 3,
+    status: "claimed",
+    claimed_at: new Date().toISOString(),
+  }).eq("target_id", t.id);
+  const { data: job } = await db.from("jobs").select("id").eq("target_id", t.id).single();
+  assertExists(job);
+
+  const { error } = await db.rpc("reschedule_job", { p_job_id: job.id, p_ok: true });
+  assertEquals(error, null);
+
+  const { data: after } = await db.from("jobs")
+    .select("status, consecutive_failures, next_run_at, claimed_at, last_run_at")
+    .eq("id", job.id).single();
+  assertExists(after);
+  assertEquals(after.status, "idle");
+  assertEquals(after.consecutive_failures, 0);
+  assertEquals(after.claimed_at, null);
+  assertExists(after.last_run_at);
+  assertEquals(new Date(after.next_run_at).getTime() > Date.now(), true);
+});
+
+Deno.test("reschedule_job: failure increments consecutive_failures", async () => {
+  const db = getServiceClient();
+  await resetEngineTables(db);
+  const t = await seedTarget(db);
+  const { data: job } = await db.from("jobs").select("id").eq("target_id", t.id).single();
+  assertExists(job);
+  await db.rpc("reschedule_job", { p_job_id: job.id, p_ok: false });
+  const { data: after } = await db.from("jobs")
+    .select("consecutive_failures").eq("id", job.id).single();
+  assertExists(after);
+  assertEquals(after.consecutive_failures, 1);
+});
+
+Deno.test("reschedule_job: honours min_interval_seconds, not the target's interval", async () => {
+  const db = getServiceClient();
+  await resetEngineTables(db);
+  const t = await seedTarget(db, { interval_seconds: 60 });
+  // entitlements floor the cadence on the job row; the hot path never joins to billing
+  await db.from("jobs").update({ min_interval_seconds: 3600 }).eq("target_id", t.id);
+  const { data: job } = await db.from("jobs").select("id").eq("target_id", t.id).single();
+  assertExists(job);
+
+  await db.rpc("reschedule_job", { p_job_id: job.id, p_ok: true });
+  const { data: after } = await db.from("jobs").select("next_run_at").eq("id", job.id).single();
+  assertExists(after);
+  const secondsOut = (new Date(after.next_run_at).getTime() - Date.now()) / 1000;
+  assertEquals(secondsOut > 3000, true, `expected ~3600s out, got ${secondsOut}s`);
+});
+
+Deno.test("reap_stuck_jobs: resets jobs claimed longer than the max age", async () => {
+  const db = getServiceClient();
+  await resetEngineTables(db);
+  const t = await seedTarget(db);
+  await db.from("jobs").update({
+    status: "claimed",
+    claimed_at: new Date(Date.now() - 10 * 60_000).toISOString(),
+  }).eq("target_id", t.id);
+
+  const { data: reaped, error } = await db.rpc("reap_stuck_jobs", {
+    p_max_claim_age_seconds: 300,
+  });
+  assertEquals(error, null);
+  assertEquals(reaped, 1);
+  const { data: job } = await db.from("jobs").select("status").eq("target_id", t.id).single();
+  assertExists(job);
+  assertEquals(job.status, "idle");
+});
+
+Deno.test("reap_stuck_jobs: leaves freshly claimed jobs alone", async () => {
+  const db = getServiceClient();
+  await resetEngineTables(db);
+  const t = await seedTarget(db);
+  await db.from("jobs").update({
+    status: "claimed",
+    claimed_at: new Date(Date.now() - 30_000).toISOString(),
+  }).eq("target_id", t.id);
+
+  const { data: reaped } = await db.rpc("reap_stuck_jobs", { p_max_claim_age_seconds: 300 });
+  assertEquals(reaped, 0);
+  const { data: job } = await db.from("jobs").select("status").eq("target_id", t.id).single();
+  assertExists(job);
+  assertEquals(job.status, "claimed", "an in-flight ping must not be reaped mid-run");
+});
