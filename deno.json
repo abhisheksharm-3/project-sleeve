@@ -1,0 +1,12 @@
+{
+  "imports": {
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2",
+    "@std/assert": "jsr:@std/assert@1"
+  },
+  "tasks": {
+    "test:unit": "deno test supabase/functions/pinger/",
+    "test:int": "deno test --allow-net --allow-env tests/integration/"
+  },
+  "fmt": { "lineWidth": 100 },
+  "nodeModulesDir": "none"
+}

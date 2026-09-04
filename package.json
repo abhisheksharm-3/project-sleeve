@@ -1,0 +1,7 @@
+{
+  "name": "projectsleeve",
+  "private": true,
+  "devDependencies": {
+    "supabase": "2.116.0"
+  }
+}
