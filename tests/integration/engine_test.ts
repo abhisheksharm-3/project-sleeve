@@ -1,6 +1,8 @@
-import { assertEquals, assertExists } from "@std/assert";
+import { assert, assertEquals, assertExists } from "@std/assert";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServiceClient, resetEngineTables } from "../helpers/db.ts";
+import { startEchoServer } from "../helpers/echo_server.ts";
+import { runCycle } from "../../supabase/functions/pinger/engine.ts";
 
 /**
  * Insert a target plus a job that is already due.
@@ -243,4 +245,169 @@ Deno.test("target sync: re-enabling does not reset an existing job's failure str
   assertExists(job);
   assertEquals(job.min_interval_seconds, 120);
   assertEquals(job.consecutive_failures, 4);
+});
+
+Deno.test("runCycle: pings a live target, logs success, advances next_run_at", async () => {
+  const db = getServiceClient();
+  await resetEngineTables(db);
+  const echo = startEchoServer(() => new Response("ok", { status: 200 }));
+  try {
+    const { data: t } = await db.from("targets").insert({
+      platform: "custom",
+      url: echo.url,
+      heartbeat_type: "plain",
+      interval_seconds: 60,
+    }).select().single();
+    assertExists(t);
+
+    const { processed } = await runCycle(db, { batchSize: 50 });
+    assertEquals(processed, 1);
+
+    const { data: logs } = await db.from("ping_log")
+      .select("ok, status_code, latency_ms, error").eq("target_id", t.id);
+    assertEquals(logs?.length, 1);
+    assertEquals(logs?.[0].ok, true);
+    assertEquals(logs?.[0].status_code, 200);
+    assertEquals(logs?.[0].error, null);
+    assertEquals(typeof logs?.[0].latency_ms, "number");
+
+    const { data: job } = await db.from("jobs")
+      .select("status, next_run_at, consecutive_failures").eq("target_id", t.id).single();
+    assertExists(job);
+    assertEquals(job.status, "idle");
+    assertEquals(job.consecutive_failures, 0);
+    assertEquals(new Date(job.next_run_at).getTime() > Date.now(), true);
+  } finally {
+    await echo.stop();
+  }
+});
+
+Deno.test("runCycle: a supabase 540 records a pause_event", async () => {
+  const db = getServiceClient();
+  await resetEngineTables(db);
+  const echo = startEchoServer(() => new Response("", { status: 540 }));
+  try {
+    const { data: t } = await db.from("targets").insert({
+      platform: "supabase",
+      url: echo.url,
+      heartbeat_type: "db_query",
+      interval_seconds: 60,
+    }).select().single();
+    assertExists(t);
+
+    await runCycle(db);
+    const { data: pauses } = await db.from("pause_events")
+      .select("signal, platform, last_ok_ping_at").eq("target_id", t.id);
+    assertEquals(pauses?.length, 1);
+    assert(pauses?.[0].signal.includes("540"));
+    assertEquals(pauses?.[0].platform, "supabase");
+    assertEquals(pauses?.[0].last_ok_ping_at, null, "no successful ping has ever happened");
+  } finally {
+    await echo.stop();
+  }
+});
+
+Deno.test("runCycle: pause_event carries the buffer since the last good ping", async () => {
+  const db = getServiceClient();
+  await resetEngineTables(db);
+  const echo = startEchoServer(() => new Response("", { status: 540 }));
+  try {
+    const { data: t } = await db.from("targets").insert({
+      platform: "supabase",
+      url: echo.url,
+      heartbeat_type: "db_query",
+      interval_seconds: 60,
+    }).select().single();
+    assertExists(t);
+
+    // a good ping two days ago, then the platform pauses
+    const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    await db.from("ping_log").insert({
+      target_id: t.id,
+      ran_at: twoDaysAgo,
+      ok: true,
+      status_code: 200,
+      latency_ms: 12,
+    });
+
+    await runCycle(db);
+    const { data: pauses } = await db.from("pause_events")
+      .select("last_ok_ping_at, days_since_last_ok").eq("target_id", t.id).single();
+    assertExists(pauses);
+    assertEquals(new Date(pauses.last_ok_ping_at).toISOString(), twoDaysAgo);
+    assert(
+      Math.abs(Number(pauses.days_since_last_ok) - 2) < 0.01,
+      `expected ~2 days of buffer, got ${pauses.days_since_last_ok}`,
+    );
+  } finally {
+    await echo.stop();
+  }
+});
+
+Deno.test("runCycle: a failing target logs the failure and returns the job to the queue", async () => {
+  const db = getServiceClient();
+  await resetEngineTables(db);
+  const echo = startEchoServer(() => new Response("", { status: 500 }));
+  try {
+    const { data: t } = await db.from("targets").insert({
+      platform: "custom",
+      url: echo.url,
+      heartbeat_type: "plain",
+      interval_seconds: 60,
+    }).select().single();
+    assertExists(t);
+
+    await runCycle(db);
+    const { data: logs } = await db.from("ping_log").select("ok, status_code").eq("target_id", t.id);
+    assertEquals(logs?.[0].ok, false);
+    assertEquals(logs?.[0].status_code, 500);
+
+    const { data: job } = await db.from("jobs")
+      .select("status, consecutive_failures").eq("target_id", t.id).single();
+    assertExists(job);
+    assertEquals(job.status, "idle", "a failed ping must not strand the job");
+    assertEquals(job.consecutive_failures, 1);
+
+    // no pause_event: `custom` has no calibrated pause signature
+    const { data: pauses } = await db.from("pause_events").select("id").eq("target_id", t.id);
+    assertEquals(pauses?.length, 0);
+  } finally {
+    await echo.stop();
+  }
+});
+
+Deno.test("runCycle: a hung target is given up on and its job returned to the queue", async () => {
+  const db = getServiceClient();
+  await resetEngineTables(db);
+  // accepts the connection, never answers
+  const echo = startEchoServer(() => new Promise<Response>(() => {}));
+  try {
+    const { data: t } = await db.from("targets").insert({
+      platform: "custom",
+      url: echo.url,
+      heartbeat_type: "plain",
+      interval_seconds: 60,
+    }).select().single();
+    assertExists(t);
+
+    const { processed } = await runCycle(db, { timeoutMs: 400 });
+    assertEquals(processed, 1);
+
+    const { data: logs } = await db.from("ping_log").select("ok, error").eq("target_id", t.id);
+    assertEquals(logs?.[0].ok, false);
+    assert(logs?.[0].error?.includes("timeout"), `expected a timeout error, got ${logs?.[0].error}`);
+
+    const { data: job } = await db.from("jobs").select("status").eq("target_id", t.id).single();
+    assertExists(job);
+    assertEquals(job.status, "idle", "a hung target must not strand the job until the reaper");
+  } finally {
+    await echo.stop();
+  }
+});
+
+Deno.test("runCycle: does nothing when no job is due", async () => {
+  const db = getServiceClient();
+  await resetEngineTables(db);
+  const { processed } = await runCycle(db);
+  assertEquals(processed, 0);
 });

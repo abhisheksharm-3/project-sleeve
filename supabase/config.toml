@@ -411,3 +411,8 @@ enabled = true
 # declarative_schema_path = "./schemas"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+[functions.pinger]
+# pg_cron authenticates with the x-sleeve-cron shared secret the function checks itself.
+# Leaving JWT verification on would have the gateway reject that call before it arrives.
+verify_jwt = false
