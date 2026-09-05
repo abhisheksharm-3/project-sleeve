@@ -77,7 +77,14 @@ export async function runHeartbeat(job: Job, opts: HeartbeatOptions = {}): Promi
   }
 
   const headers = new Headers();
-  if (job.secret) headers.set("authorization", `Bearer ${job.secret}`);
+  if (job.secret) {
+    headers.set("authorization", `Bearer ${job.secret}`);
+    // Platform-aware, which is the whole point: Supabase's gateway authenticates on the
+    // apikey header and answers a bearer-only request with 401, so without this the ping
+    // never reaches PostgREST and never touches Postgres. The key here is the project's
+    // anon key, which is public by design.
+    if (job.platform === "supabase") headers.set("apikey", job.secret);
+  }
   // tells the user's snippet to run a real query rather than return a static 200
   if (job.heartbeat_type === "db_query") headers.set("x-sleeve-mode", "db_query");
 

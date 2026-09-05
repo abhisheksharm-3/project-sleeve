@@ -195,3 +195,47 @@ Deno.test("detectPause: platforms with no known pause signature never report pau
     assertEquals(r.paused, false, `${platform} has no calibrated signature yet`);
   }
 });
+
+Deno.test("runHeartbeat: a supabase target also sends the key as apikey", () => {
+  // Supabase's gateway authenticates on the apikey header; Authorization alone is a 401,
+  // so a bearer-only ping never reaches PostgREST and never touches Postgres.
+  let seen: Headers | undefined;
+  const fetchFn = ((_u: string | URL | Request, init: RequestInit) => {
+    seen = new Headers(init.headers);
+    return Promise.resolve(new Response("", { status: 200 }));
+  }) as unknown as typeof fetch;
+
+  return runHeartbeat({ ...baseJob, platform: "supabase", secret: "anon-key" }, { fetchFn })
+    .then(() => {
+      assertEquals(seen?.get("apikey"), "anon-key");
+      assertEquals(seen?.get("authorization"), "Bearer anon-key");
+    });
+});
+
+Deno.test("runHeartbeat: non-supabase targets never leak the key into apikey", () => {
+  let seen: Headers | undefined;
+  const fetchFn = ((_u: string | URL | Request, init: RequestInit) => {
+    seen = new Headers(init.headers);
+    return Promise.resolve(new Response("", { status: 200 }));
+  }) as unknown as typeof fetch;
+
+  return runHeartbeat({ ...baseJob, platform: "custom", secret: "s3" }, { fetchFn })
+    .then(() => {
+      assertEquals(seen?.get("apikey"), null);
+      assertEquals(seen?.get("authorization"), "Bearer s3");
+    });
+});
+
+Deno.test("runHeartbeat: a supabase target with no secret sends neither header", () => {
+  let seen: Headers | undefined;
+  const fetchFn = ((_u: string | URL | Request, init: RequestInit) => {
+    seen = new Headers(init.headers);
+    return Promise.resolve(new Response("", { status: 200 }));
+  }) as unknown as typeof fetch;
+
+  return runHeartbeat({ ...baseJob, platform: "supabase", secret: null }, { fetchFn })
+    .then(() => {
+      assertEquals(seen?.get("apikey"), null);
+      assertEquals(seen?.get("authorization"), null);
+    });
+});
