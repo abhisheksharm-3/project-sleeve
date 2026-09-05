@@ -14,7 +14,8 @@ const baseJob: Job = {
 Deno.test("runHeartbeat: 200 → ok with status and latency", async () => {
   let seconds = 0;
   const now = () => (seconds += 0.05, seconds * 1000); // +50ms per call
-  const fetchFn = (async () => new Response("anything", { status: 200 })) as typeof fetch;
+  const fetchFn =
+    (() => Promise.resolve(new Response("anything", { status: 200 }))) as typeof fetch;
   const r = await runHeartbeat(baseJob, { fetchFn, now });
   assertEquals(r.ok, true);
   assertEquals(r.status_code, 200);
@@ -23,23 +24,21 @@ Deno.test("runHeartbeat: 200 → ok with status and latency", async () => {
 });
 
 Deno.test("runHeartbeat: 500 → not ok, status recorded", async () => {
-  const fetchFn = (async () => new Response("", { status: 500 })) as typeof fetch;
+  const fetchFn = (() => Promise.resolve(new Response("", { status: 500 }))) as typeof fetch;
   const r = await runHeartbeat(baseJob, { fetchFn });
   assertEquals(r.ok, false);
   assertEquals(r.status_code, 500);
 });
 
 Deno.test("runHeartbeat: a 302 still counts as alive", async () => {
-  const fetchFn = (async () => new Response("", { status: 302 })) as typeof fetch;
+  const fetchFn = (() => Promise.resolve(new Response("", { status: 302 }))) as typeof fetch;
   const r = await runHeartbeat(baseJob, { fetchFn });
   assertEquals(r.ok, true);
   assertEquals(r.status_code, 302);
 });
 
 Deno.test("runHeartbeat: network throw → not ok, error message, no status", async () => {
-  const fetchFn = (async () => {
-    throw new Error("connreset");
-  }) as typeof fetch;
+  const fetchFn = (() => Promise.reject(new Error("connreset"))) as typeof fetch;
   const r = await runHeartbeat(baseJob, { fetchFn });
   assertEquals(r.ok, false);
   assertEquals(r.status_code, null);
@@ -48,9 +47,9 @@ Deno.test("runHeartbeat: network throw → not ok, error message, no status", as
 
 Deno.test("runHeartbeat: db_query sends mode header and bearer secret", async () => {
   let seen: Headers | undefined;
-  const fetchFn = (async (_u: string | URL | Request, init: RequestInit) => {
+  const fetchFn = ((_u: string | URL | Request, init: RequestInit) => {
     seen = new Headers(init.headers);
-    return new Response("", { status: 200 });
+    return Promise.resolve(new Response("", { status: 200 }));
   }) as unknown as typeof fetch;
   await runHeartbeat({ ...baseJob, heartbeat_type: "db_query", secret: "s3" }, { fetchFn });
   assertEquals(seen?.get("x-sleeve-mode"), "db_query");
@@ -59,9 +58,9 @@ Deno.test("runHeartbeat: db_query sends mode header and bearer secret", async ()
 
 Deno.test("runHeartbeat: plain sends no mode header and no authorization", async () => {
   let seen: Headers | undefined;
-  const fetchFn = (async (_u: string | URL | Request, init: RequestInit) => {
+  const fetchFn = ((_u: string | URL | Request, init: RequestInit) => {
     seen = new Headers(init.headers);
-    return new Response("", { status: 200 });
+    return Promise.resolve(new Response("", { status: 200 }));
   }) as unknown as typeof fetch;
   await runHeartbeat(baseJob, { fetchFn });
   assertEquals(seen?.get("x-sleeve-mode"), null);
@@ -77,10 +76,14 @@ Deno.test("runHeartbeat: synthetic is not implemented yet", async () => {
 Deno.test("runHeartbeat: a hung target fails on the deadline instead of blocking", async () => {
   // A target that accepts the connection and never answers must not strand the job in
   // 'claimed' until the reaper, nor burn the whole Edge Function wall clock.
-  const fetchFn = ((_u: string | URL | Request, init: RequestInit) =>
-    new Promise<Response>((_resolve, reject) => {
-      init.signal?.addEventListener("abort", () => reject(new DOMException("timeout", "TimeoutError")));
-    })) as unknown as typeof fetch;
+  const fetchFn =
+    ((_u: string | URL | Request, init: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init.signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("timeout", "TimeoutError")),
+        );
+      })) as unknown as typeof fetch;
 
   const started = performance.now();
   const r = await runHeartbeat(baseJob, { fetchFn, timeoutMs: 150 });
@@ -109,7 +112,7 @@ Deno.test("runHeartbeat: never reads the response body (data minimization)", asy
       cancelled = true;
     },
   }, { highWaterMark: 0 });
-  const fetchFn = (async () => new Response(body, { status: 200 })) as typeof fetch;
+  const fetchFn = (() => Promise.resolve(new Response(body, { status: 200 }))) as typeof fetch;
 
   const r = await runHeartbeat(baseJob, { fetchFn });
   assertEquals(pulled, false, "the response body must never be pulled");

@@ -8,5 +8,14 @@
     "test:int": "deno test --allow-net --allow-env tests/integration/"
   },
   "fmt": { "lineWidth": 100 },
+  "lint": {
+    "rules": {
+      // supabase/functions/* is deployed to Supabase's Edge Runtime, not run as part of
+      // this Deno project, so those files pin their own npm: specifiers instead of
+      // relying on the import map above being resolved at deploy time.
+      "exclude": ["no-import-prefix"]
+    },
+    "report": "pretty"
+  },
   "nodeModulesDir": "none"
 }

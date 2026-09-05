@@ -68,7 +68,12 @@ export async function runHeartbeat(job: Job, opts: HeartbeatOptions = {}): Promi
     return { ok: false, status_code: null, latency_ms: null, error: "invalid url" };
   }
   if (scheme !== "http:" && scheme !== "https:") {
-    return { ok: false, status_code: null, latency_ms: null, error: `unsupported scheme ${scheme}` };
+    return {
+      ok: false,
+      status_code: null,
+      latency_ms: null,
+      error: `unsupported scheme ${scheme}`,
+    };
   }
 
   const headers = new Headers();

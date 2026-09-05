@@ -358,7 +358,10 @@ Deno.test("runCycle: a failing target logs the failure and returns the job to th
     assertExists(t);
 
     await runCycle(db);
-    const { data: logs } = await db.from("ping_log").select("ok, status_code").eq("target_id", t.id);
+    const { data: logs } = await db.from("ping_log").select("ok, status_code").eq(
+      "target_id",
+      t.id,
+    );
     assertEquals(logs?.[0].ok, false);
     assertEquals(logs?.[0].status_code, 500);
 
@@ -395,7 +398,10 @@ Deno.test("runCycle: a hung target is given up on and its job returned to the qu
 
     const { data: logs } = await db.from("ping_log").select("ok, error").eq("target_id", t.id);
     assertEquals(logs?.[0].ok, false);
-    assert(logs?.[0].error?.includes("timeout"), `expected a timeout error, got ${logs?.[0].error}`);
+    assert(
+      logs?.[0].error?.includes("timeout"),
+      `expected a timeout error, got ${logs?.[0].error}`,
+    );
 
     const { data: job } = await db.from("jobs").select("status").eq("target_id", t.id).single();
     assertExists(job);

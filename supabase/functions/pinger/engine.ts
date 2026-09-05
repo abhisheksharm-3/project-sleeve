@@ -47,9 +47,7 @@ async function recordOutcome(db: SupabaseClient, job: Job, result: PingResult): 
     platform: job.platform,
     signal: pause.signal,
     last_ok_ping_at: lastOkAt,
-    days_since_last_ok: lastOkAt
-      ? (Date.now() - new Date(lastOkAt).getTime()) / 86_400_000
-      : null,
+    days_since_last_ok: lastOkAt ? (Date.now() - new Date(lastOkAt).getTime()) / 86_400_000 : null,
   });
   if (pauseError) throw new Error(`pause_events insert failed: ${pauseError.message}`);
 }
