@@ -97,3 +97,33 @@ export async function runHeartbeat(job: Job, opts: HeartbeatOptions = {}): Promi
     return { ok: false, status_code: null, latency_ms: null, error: describeError(e, timeoutMs) };
   }
 }
+
+/**
+ * Did this response mean "the platform paused the project", as opposed to "the project is
+ * broken"? This is the Tier-1 feedback loop (spec §8): the ground truth for whether
+ * keep-alive actually works, and the signal that a `plain` target should move to
+ * `db_query`.
+ *
+ * Status codes only — never the body, per data minimization. A platform absent from this
+ * table reports failures but never pauses: a wrong pause signature would poison the one
+ * dataset that measures the product. Signatures get calibrated from real pause_events
+ * before a platform is added.
+ */
+const PAUSE_STATUS: Record<string, number[]> = {
+  supabase: [540, 503],
+  render: [503],
+};
+
+export function detectPause(
+  job: Job,
+  result: PingResult,
+): { paused: boolean; signal: string | null } {
+  // no status line means we cannot tell a paused project from broken DNS
+  if (result.ok || result.status_code === null) return { paused: false, signal: null };
+
+  const codes = PAUSE_STATUS[job.platform] ?? [];
+  if (codes.includes(result.status_code)) {
+    return { paused: true, signal: `${job.platform}:status_${result.status_code}` };
+  }
+  return { paused: false, signal: null };
+}

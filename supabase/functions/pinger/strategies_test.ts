@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
-import { type Job, runHeartbeat } from "./strategies.ts";
+import { detectPause, type Job, runHeartbeat } from "./strategies.ts";
 
 const baseJob: Job = {
   job_id: "j1",
@@ -115,4 +115,80 @@ Deno.test("runHeartbeat: never reads the response body (data minimization)", asy
   assertEquals(pulled, false, "the response body must never be pulled");
   assertEquals(cancelled, true, "the body must be cancelled so the connection is released");
   assertEquals(Object.keys(r).sort(), ["error", "latency_ms", "ok", "status_code"]);
+});
+
+Deno.test("detectPause: supabase 540 → paused", () => {
+  const r = detectPause({ ...baseJob, platform: "supabase" }, {
+    ok: false,
+    status_code: 540,
+    latency_ms: null,
+    error: null,
+  });
+  assertEquals(r.paused, true);
+  assert(r.signal !== null && r.signal.includes("540"));
+});
+
+Deno.test("detectPause: render 503 → paused", () => {
+  const r = detectPause({ ...baseJob, platform: "render" }, {
+    ok: false,
+    status_code: 503,
+    latency_ms: null,
+    error: null,
+  });
+  assertEquals(r.paused, true);
+});
+
+Deno.test("detectPause: custom platform never paused (just failing)", () => {
+  const r = detectPause({ ...baseJob, platform: "custom" }, {
+    ok: false,
+    status_code: 503,
+    latency_ms: null,
+    error: null,
+  });
+  assertEquals(r.paused, false);
+});
+
+Deno.test("detectPause: a healthy 200 is never paused", () => {
+  const r = detectPause({ ...baseJob, platform: "supabase" }, {
+    ok: true,
+    status_code: 200,
+    latency_ms: 10,
+    error: null,
+  });
+  assertEquals(r.paused, false);
+});
+
+Deno.test("detectPause: a supabase 500 is a failure, not a pause", () => {
+  const r = detectPause({ ...baseJob, platform: "supabase" }, {
+    ok: false,
+    status_code: 500,
+    latency_ms: null,
+    error: null,
+  });
+  assertEquals(r.paused, false);
+});
+
+Deno.test("detectPause: a network error is not a pause signal", () => {
+  // no status line means we cannot tell a paused project from a broken DNS entry;
+  // claiming a pause here would poison the one dataset that measures the product
+  const r = detectPause({ ...baseJob, platform: "supabase" }, {
+    ok: false,
+    status_code: null,
+    latency_ms: null,
+    error: "connreset",
+  });
+  assertEquals(r.paused, false);
+  assertEquals(r.signal, null);
+});
+
+Deno.test("detectPause: platforms with no known pause signature never report paused", () => {
+  for (const platform of ["appwrite", "railway"]) {
+    const r = detectPause({ ...baseJob, platform }, {
+      ok: false,
+      status_code: 503,
+      latency_ms: null,
+      error: null,
+    });
+    assertEquals(r.paused, false, `${platform} has no calibrated signature yet`);
+  }
 });
