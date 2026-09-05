@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { safeRedirect, siteUrl } from "@/lib/site-url";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -13,13 +14,12 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/";
 
-  // Behind Vercel the request host is the proxy's, so trust the forwarded host if present.
-  const forwardedHost = request.headers.get("x-forwarded-host");
-  const origin = forwardedHost
-    ? `${request.headers.get("x-forwarded-proto") ?? "https"}://${forwardedHost}`
-    : request.nextUrl.origin;
+  // Configured origin, not the request's: see lib/site-url.ts. `next` is caller-supplied,
+  // so it is resolved against that origin and rejected if it lands anywhere else —
+  // an open redirect on the hop straight after sign-in is a phishing gift.
+  const origin = siteUrl();
+  const destination = safeRedirect(searchParams.get("next"), origin);
 
   const oauthError = searchParams.get("error_description") ?? searchParams.get("error");
   if (oauthError) {
@@ -49,5 +49,5 @@ export async function GET(request: NextRequest) {
     if (tokenError) console.error(`storing github token failed: ${tokenError.message}`);
   }
 
-  return NextResponse.redirect(`${origin}${next}`);
+  return NextResponse.redirect(destination);
 }

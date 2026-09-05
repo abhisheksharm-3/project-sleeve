@@ -9,7 +9,9 @@ import { type NextRequest, NextResponse } from "next/server";
  * the authorization boundary — RLS is. Every page still resolves its own user, and the
  * database refuses to hand over rows the caller does not own regardless of what happens here.
  */
+/** Everything else requires a session. "/" is the public landing page. */
 const PUBLIC_PREFIXES = ["/login", "/auth"];
+const PUBLIC_EXACT = ["/"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -42,7 +44,7 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PREFIXES.some((p) => path.startsWith(p));
+  const isPublic = PUBLIC_EXACT.includes(path) || PUBLIC_PREFIXES.some((p) => path.startsWith(p));
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
@@ -50,9 +52,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && path === "/login") {
+  // Someone already signed in has no use for the sign-in page or the pitch.
+  if (user && (path === "/login" || path === "/")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 

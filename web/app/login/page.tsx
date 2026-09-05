@@ -1,5 +1,5 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { siteUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -12,10 +12,9 @@ import { createClient } from "@/lib/supabase/server";
 async function signInWithGitHub() {
   "use server";
 
-  const headerList = await headers();
-  const forwardedHost = headerList.get("x-forwarded-host") ?? headerList.get("host");
-  const proto = headerList.get("x-forwarded-proto") ?? "http";
-  const origin = `${proto}://${forwardedHost}`;
+  // The origin comes from configuration, never from request headers: a redirect_uri built
+  // from an attacker-supplied Host would hand them the authorization code.
+  const origin = siteUrl();
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
