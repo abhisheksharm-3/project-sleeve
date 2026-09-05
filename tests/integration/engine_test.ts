@@ -184,3 +184,63 @@ Deno.test("reap_stuck_jobs: leaves freshly claimed jobs alone", async () => {
   assertExists(job);
   assertEquals(job.status, "claimed", "an in-flight ping must not be reaped mid-run");
 });
+
+Deno.test("target sync: enabling a target creates one job, disabling removes it", async () => {
+  const db = getServiceClient();
+  await resetEngineTables(db);
+  const { data: t } = await db.from("targets").insert({
+    platform: "custom",
+    url: "http://example.test/ping",
+    heartbeat_type: "plain",
+    interval_seconds: 90,
+    enabled: true,
+  }).select().single();
+  assertExists(t);
+
+  const { data: jobs1 } = await db.from("jobs")
+    .select("min_interval_seconds").eq("target_id", t.id);
+  assertEquals(jobs1?.length, 1);
+  assertEquals(jobs1?.[0].min_interval_seconds, 90);
+
+  await db.from("targets").update({ enabled: false }).eq("id", t.id);
+  const { data: jobs2 } = await db.from("jobs").select("id").eq("target_id", t.id);
+  assertEquals(jobs2?.length, 0);
+
+  // re-enabling brings the job back, due now
+  await db.from("targets").update({ enabled: true }).eq("id", t.id);
+  const { data: jobs3 } = await db.from("jobs").select("id").eq("target_id", t.id);
+  assertEquals(jobs3?.length, 1);
+});
+
+Deno.test("target sync: changing interval_seconds updates the job cadence", async () => {
+  const db = getServiceClient();
+  await resetEngineTables(db);
+  const { data: t } = await db.from("targets").insert({
+    platform: "custom",
+    url: "http://example.test/ping",
+    heartbeat_type: "plain",
+    interval_seconds: 60,
+  }).select().single();
+  assertExists(t);
+
+  await db.from("targets").update({ interval_seconds: 300 }).eq("id", t.id);
+  const { data: job } = await db.from("jobs")
+    .select("min_interval_seconds").eq("target_id", t.id).single();
+  assertExists(job);
+  assertEquals(job.min_interval_seconds, 300);
+});
+
+Deno.test("target sync: re-enabling does not reset an existing job's failure streak", async () => {
+  const db = getServiceClient();
+  await resetEngineTables(db);
+  const t = await seedTarget(db);
+  await db.from("jobs").update({ consecutive_failures: 4 }).eq("target_id", t.id);
+
+  // an unrelated config edit must not wipe the monitoring signal
+  await db.from("targets").update({ interval_seconds: 120 }).eq("id", t.id);
+  const { data: job } = await db.from("jobs")
+    .select("consecutive_failures, min_interval_seconds").eq("target_id", t.id).single();
+  assertExists(job);
+  assertEquals(job.min_interval_seconds, 120);
+  assertEquals(job.consecutive_failures, 4);
+});
