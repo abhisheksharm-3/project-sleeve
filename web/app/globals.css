@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+/* A status console, not a dashboard. The product's promise is that something quietly keeps
+   running, so the interface is dense, hairline-ruled and almost chrome-free — closer to a
+   terminal readout than to an admin panel. Dark only, on purpose. */
+@theme {
+  --color-ink: #0a0b0d;
+  --color-surface: #111316;
+  --color-raised: #171a1f;
+  --color-line: #1e2126;
+  --color-text: #e6e8eb;
+  --color-muted: #8b939e;
+  --color-alive: #3fb950;
+  --color-warn: #d29922;
+  --color-dead: #f85149;
+  --color-accent: #58a6ff;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-ink);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+/* Headings sit tight; the density is the point. */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+/* The heartbeat. A target that is alive breathes; one that is not sits still. */
+@keyframes sleeve-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+.pulse {
+  animation: sleeve-pulse 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse {
+    animation: none;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
