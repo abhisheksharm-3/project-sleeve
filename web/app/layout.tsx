@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque } from "next/font/google";
+import { Instrument_Sans } from "next/font/google";
 import { siteUrl } from "@/lib/site-url";
 import "./globals.css";
 
-/** One family, used at real optical sizes, carries the whole interface. */
-const bricolage = Bricolage_Grotesque({ variable: "--font-bricolage", subsets: ["latin"] });
+/** One family carries the whole interface: narrow enough for dense rows, with even figures. */
+const instrument = Instrument_Sans({ variable: "--font-instrument", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${bricolage.variable} h-full antialiased`}>
+    <html lang="en" className={`${instrument.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

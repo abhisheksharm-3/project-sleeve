@@ -10,15 +10,15 @@ const HEADLINE = "Keeping the lights on for the projects you are not touching.";
 const WORDMARK = "ProjectSleeve";
 
 /**
- * Bricolage Grotesque, subset by Google Fonts to just the characters drawn here.
+ * Instrument Sans, subset by Google Fonts to just the characters drawn here.
  *
  * ponytail: fetched at build time, so a build without network fails here; vendor the TTF
  * into the repo if builds must run offline.
  */
-async function bricolage(): Promise<ArrayBuffer> {
+async function instrument(): Promise<ArrayBuffer> {
   const css = await (
     await fetch(
-      `https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600&text=${encodeURIComponent(HEADLINE + WORDMARK)}`,
+      `https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@600&text=${encodeURIComponent(HEADLINE + WORDMARK)}`,
     )
   ).text();
   const url = css.match(/src: url\((.+?)\)/)?.[1];
@@ -43,7 +43,7 @@ export default async function OpengraphImage() {
         height: "100%",
         background: "#000",
         color: "#e9e4d8",
-        fontFamily: "Bricolage",
+        fontFamily: "Instrument",
         padding: "56px 64px 0",
       }}
     >
@@ -91,6 +91,6 @@ export default async function OpengraphImage() {
         ))}
       </div>
     </div>,
-    { ...size, fonts: [{ name: "Bricolage", data: await bricolage(), weight: 600 }] },
+    { ...size, fonts: [{ name: "Instrument", data: await instrument(), weight: 600 }] },
   );
 }

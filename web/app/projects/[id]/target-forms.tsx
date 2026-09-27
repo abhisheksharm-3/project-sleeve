@@ -39,7 +39,7 @@ function IntervalField({ id, min }: { id: string; min: number }) {
   return (
     <div>
       <label className={LABEL} htmlFor={id}>
-        cadence
+        How often
       </label>
       <select
         id={id}
@@ -59,45 +59,79 @@ function IntervalField({ id, min }: { id: string; min: number }) {
   );
 }
 
+function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+  return (
+    <li className="grid gap-x-4 gap-y-3 sm:grid-cols-[1.75rem_minmax(0,1fr)]">
+      <span
+        aria-hidden
+        className="flex size-7 items-center justify-center rounded-full border border-line text-sm text-muted tabular-nums"
+      >
+        {n}
+      </span>
+      <div className="min-w-0 space-y-3">
+        <h4 className="pt-0.5 text-[15px] font-semibold">{title}</h4>
+        {children}
+      </div>
+    </li>
+  );
+}
+
 function SupabaseForm({ projectId, minInterval, prefill }: FormProps) {
   return (
-    <form action={addTarget} className="max-w-2xl space-y-4">
+    <form action={addTarget}>
       <Hidden projectId={projectId} kind="supabase" />
-      <p className="text-sm text-muted">
-        Supabase pauses a free project after 7 days without database activity. Run this once in your
-        project&apos;s SQL editor. It adds a function that returns 1 and exposes nothing else, and
-        every ping runs it inside Postgres.
-      </p>
-      <pre className="overflow-x-auto rounded-xl border border-line bg-sky p-4 font-mono text-[13px] leading-relaxed text-text/90 select-all">
-        {KEEPALIVE_SQL}
-      </pre>
-      <Field
-        id="project_url"
-        defaultValue={prefill.project_url}
-        label="Project URL"
-        placeholder="https://abcdefghijklmnopqrst.supabase.co"
-      />
-      <Field
-        id="anon_key"
-        label="Anon key (never the service-role key)"
-        placeholder="eyJhbGciOi… or sb_publishable_…"
-      />
-      <div>
-        <label className={LABEL} htmlFor="table">
-          or read a table instead — optional
-        </label>
-        <input
-          id="table"
-          name="table"
-          autoComplete="off"
-          placeholder="leave empty to use keepalive()"
-          className={FIELD}
-        />
+      <ol className="space-y-8">
+        <Step n={1} title="Add the keepalive function">
+          <p className="text-sm leading-relaxed text-muted">
+            Run this once in your project&apos;s SQL editor. It adds a function that returns 1 and
+            exposes nothing else; every check runs it inside Postgres, which is what Supabase counts
+            as activity.
+          </p>
+          <pre className="overflow-x-auto rounded-xl border border-line bg-surface p-4 font-mono text-[13px] leading-relaxed text-text/90 select-all">
+            {KEEPALIVE_SQL}
+          </pre>
+        </Step>
+        <Step n={2} title="Say which project">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field
+              id="project_url"
+              defaultValue={prefill.project_url}
+              label="Project URL"
+              placeholder="https://abcdefghijklmnopqrst.supabase.co"
+            />
+            <Field
+              id="anon_key"
+              label="Anon or publishable key"
+              placeholder="eyJhbGciOi… or sb_publishable_…"
+            />
+          </div>
+          <p className="text-sm text-muted">
+            Never the service-role key; we refuse it. Both are under Project Settings, API.
+          </p>
+        </Step>
+        <Step n={3} title="Choose how often">
+          <div className="grid gap-4 md:grid-cols-2">
+            <IntervalField id="supabase_interval" min={minInterval} />
+            <div>
+              <label className={LABEL} htmlFor="table">
+                Table to read instead, optional
+              </label>
+              <input
+                id="table"
+                name="table"
+                autoComplete="off"
+                placeholder="Leave empty to use keepalive()"
+                className={FIELD}
+              />
+            </div>
+          </div>
+        </Step>
+      </ol>
+      <div className="mt-8 sm:pl-11">
+        <button type="submit" className={BUTTON}>
+          Keep it awake
+        </button>
       </div>
-      <IntervalField id="supabase_interval" min={minInterval} />
-      <button type="submit" className={BUTTON}>
-        Add Supabase target
-      </button>
     </form>
   );
 }
@@ -310,13 +344,13 @@ export function AddTarget({ kind, ...props }: FormProps & { kind: string | undef
   const chosen = PLATFORMS.find((p) => p.kind === kind);
   if (!chosen) {
     return (
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-2 xl:grid-cols-5">
         {PLATFORMS.map((p) => (
           <Link
             key={p.kind}
             href={`?add=${p.kind}#add`}
             scroll={false}
-            className="group flex gap-3 rounded-2xl border border-line bg-surface p-5 transition-colors hover:border-alive/60"
+            className="group flex gap-3 bg-ink p-5 transition-colors hover:bg-surface"
           >
             <span
               aria-hidden
@@ -333,9 +367,10 @@ export function AddTarget({ kind, ...props }: FormProps & { kind: string | undef
       </div>
     );
   }
+  const connect = chosen.kind === "supabase" && supabaseConnect;
   return (
-    <div className="rounded-2xl border border-line bg-surface p-6 sm:p-8">
-      <div className="mb-6 flex flex-wrap items-baseline justify-between gap-4">
+    <div className="rounded-2xl border border-line p-6 sm:p-8">
+      <div className="mb-8 flex flex-wrap items-baseline justify-between gap-4">
         <h3 className="text-lg font-semibold">Keep a {chosen.name} backend awake</h3>
         <Link
           href="?#add"
@@ -345,23 +380,32 @@ export function AddTarget({ kind, ...props }: FormProps & { kind: string | undef
           Choose a different platform
         </Link>
       </div>
-      {chosen.kind === "supabase" && supabaseConnect && (
-        <div className="mb-8 rounded-xl border border-alive/40 bg-alive/5 p-5">
-          <p className="text-[15px] font-semibold">Let us do it for you</p>
-          <p className="mt-1 text-sm leading-relaxed text-muted">
-            Connect your Supabase account once and pick a project. We install keepalive() and add
-            the key ourselves, then let go of the access.
-          </p>
-          <a
-            href={`/connect/supabase/start?project=${props.projectId}`}
-            className="mt-4 inline-block rounded-full bg-alive px-5 py-2.5 text-sm font-semibold text-ink hover:bg-warn"
-          >
-            Connect Supabase
-          </a>
-          <p className="mt-4 text-sm text-muted">Or set it up by hand:</p>
+      <div
+        className={
+          connect ? "grid gap-10 lg:grid-cols-[18rem_minmax(0,1fr)] lg:gap-14" : "max-w-3xl"
+        }
+      >
+        {connect && (
+          <aside className="lg:border-r lg:border-line lg:pr-14">
+            <h4 className="text-[15px] font-semibold">The quick way</h4>
+            <p className="mt-2 text-sm leading-relaxed text-muted">
+              Connect your Supabase account and pick a project. We install keepalive() and add the
+              key ourselves, then let go of the access. It takes about ten seconds.
+            </p>
+            <a
+              href={`/connect/supabase/start?project=${props.projectId}`}
+              className={`mt-5 inline-block ${BUTTON}`}
+            >
+              Connect Supabase
+            </a>
+            <p className="mt-8 text-sm text-muted lg:hidden">Or do it by hand:</p>
+          </aside>
+        )}
+        <div className="min-w-0">
+          {connect && <h4 className="mb-6 text-[15px] font-semibold max-lg:hidden">By hand</h4>}
+          <chosen.Form key={JSON.stringify(props.prefill)} {...props} />
         </div>
-      )}
-      <chosen.Form key={JSON.stringify(props.prefill)} {...props} />
+      </div>
     </div>
   );
 }

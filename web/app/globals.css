@@ -17,7 +17,7 @@
   --color-accent: #f4b860;
   --color-unlit: #1d1d22;
 
-  --font-sans: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -29,7 +29,6 @@ body {
   background: var(--color-ink);
   color: var(--color-text);
   font-family: var(--font-sans);
-  font-feature-settings: "ss01";
 }
 
 h1,

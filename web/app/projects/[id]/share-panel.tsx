@@ -1,4 +1,5 @@
 /** Publishing a status page and README badge for one project. Off until the owner turns it on. */
+import Link from "next/link";
 import { setPublic } from "@/app/projects/actions";
 import { siteUrl } from "@/lib/site-url";
 
@@ -8,9 +9,9 @@ export function SharePanel({ projectId, isPublic }: { projectId: string; isPubli
   const badge = `${base}/badge/${projectId}`;
   const markdown = `[![Kept awake](${badge})](${page})`;
   return (
-    <section id="share" className="mt-14 scroll-mt-8">
+    <section id="share" className="mt-16 scroll-mt-8">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="text-xl font-semibold">Share its status</h2>
+        <h2 className="text-xl font-semibold">README badge</h2>
         <form action={setPublic}>
           <input type="hidden" name="project_id" value={projectId} />
           <input type="hidden" name="public" value={String(!isPublic)} />
@@ -22,14 +23,22 @@ export function SharePanel({ projectId, isPublic }: { projectId: string; isPubli
                 : "rounded-full bg-alive px-4 py-2 text-sm font-semibold text-ink hover:bg-warn"
             }
           >
-            {isPublic ? "Stop sharing" : "Publish a status page"}
+            {isPublic ? "Stop sharing" : "Turn on the badge"}
           </button>
         </form>
       </div>
       <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-muted">
         {isPublic
           ? "Anyone with the link can see this project's name, the kind of each backend, whether it is awake, and its uptime. Never a URL or a key."
-          : "Show visitors, or your README, that this project is awake. It shares the project's name, each backend's kind and state, and uptime; never a URL or a key."}
+          : "Show in your README that this project is awake. It shares the project's name, each backend's kind and state, and uptime; never a URL or a key."}{" "}
+        For a page covering several projects, with your own names and notices, make a{" "}
+        <Link
+          href="/status-pages"
+          className="text-text underline decoration-line underline-offset-4 hover:text-alive"
+        >
+          status page
+        </Link>
+        .
       </p>
       {isPublic && (
         <div className="mt-5 space-y-4 rounded-2xl border border-line bg-surface p-6">

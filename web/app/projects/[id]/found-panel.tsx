@@ -92,7 +92,7 @@ export function FoundPanel({
   );
 
   return (
-    <section id="found" className="mt-12 scroll-mt-8">
+    <section id="found" className="mt-16 scroll-mt-8">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h2 className="text-xl font-semibold">Found in the repository</h2>
         <span className="flex items-baseline gap-4 text-sm text-muted">
@@ -139,9 +139,12 @@ export function FoundPanel({
           )}
 
           {found.length > 0 && (
-            <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+            <ul className="border-t border-line">
               {found.map((f) => (
-                <li key={f.key} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
+                <li
+                  key={f.key}
+                  className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line py-4"
+                >
                   <span className="min-w-0 flex-1">
                     <span className="block text-[15px] font-semibold">
                       {f.title} <span className="font-normal text-muted">{f.detail}</span>
@@ -153,7 +156,7 @@ export function FoundPanel({
                   ) : (
                     <Link
                       href={f.href}
-                      className="rounded-full bg-alive px-4 py-2 text-sm font-semibold text-ink transition-colors hover:bg-warn"
+                      className="rounded-full border border-alive/50 px-4 py-1.5 text-sm font-semibold text-alive transition-colors hover:bg-alive hover:text-ink"
                     >
                       Keep it awake
                     </Link>

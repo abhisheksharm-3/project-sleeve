@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppHeader } from "@/app/components/app-header";
+import { Stat } from "@/app/components/stat";
 import { TargetCard } from "@/app/components/target-card";
-import { Window } from "@/app/components/window";
 import { removeTarget, testTarget } from "@/app/projects/actions";
 import { statusOf } from "@/lib/describe";
 import { entitlements } from "@/lib/entitlements";
+import { ago } from "@/lib/format";
+import { bufferText, type Health, passRate, type State } from "@/lib/health";
 import { loadHealth } from "@/lib/load-health";
 import { isRestoreLink } from "@/lib/probe";
 import type { RepoScan } from "@/lib/repo-scan";
@@ -26,8 +28,18 @@ type Target = {
   method: string;
 };
 
-const ROW_ACTION =
-  "rounded-full border border-line px-4 py-1.5 text-sm transition-colors hover:border-alive/60 hover:text-alive";
+/** Render's 15-minute sleep is reset by every check, so only day-long windows can run out. */
+const DAY_S = 86_400;
+
+function headlineFor(states: State[]): string {
+  if (states.some((s) => s === "paused")) return "Paused";
+  if (states.some((s) => s === "failing")) return "Failing";
+  if (states.some((s) => s === "pause_soon")) return "Close to pausing";
+  if (states.every((s) => s === "idle")) return "Waiting";
+  return "Awake";
+}
+
+const ROW_ACTION = "text-sm text-muted transition-colors hover:text-alive";
 
 /** The route a user drops into their own app so a db_query check runs a real query. */
 function Snippet({ secret }: { secret: string }) {
@@ -95,9 +107,19 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
   const now = Date.now();
   const newTarget = targets.find((t) => t.id === added);
   const [owner, repo] = project.name.includes("/") ? project.name.split("/") : ["", project.name];
+  const rows = targets.map((t) => health.get(t.id)).filter((h): h is Health => !!h);
+  const rate = passRate(rows);
+  const nearest = rows
+    .filter((h) => (h.pause_window_seconds ?? 0) >= DAY_S && Date.parse(h.pause_at ?? "") > now)
+    .sort((a, b) => Date.parse(a.pause_at ?? "") - Date.parse(b.pause_at ?? ""))[0];
+  const lastCheck = rows
+    .map((h) => h.last_ping_at)
+    .filter((at): at is string => !!at)
+    .sort()
+    .at(-1);
 
   return (
-    <div className="flex min-h-full flex-1 flex-col bg-gradient-to-b from-sky to-ink">
+    <div className="flex min-h-full flex-1 flex-col">
       <AppHeader session={session} />
       <main className="w-full flex-1 px-6 pb-16 sm:px-10 lg:px-16">
         <Link href="/dashboard" className="text-sm text-muted hover:text-text">
@@ -119,17 +141,32 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
               )}
             </p>
           </div>
-          {targets.length > 0 && (
-            <div
-              aria-hidden
-              className="flex gap-2 rounded-t-xl border border-b-0 border-line bg-surface px-4 pt-4 pb-3"
-            >
-              {targets.map((t) => (
-                <Window key={t.id} state={statusOf(t, health.get(t.id), now).state} size="lg" />
-              ))}
-            </div>
-          )}
         </section>
+
+        {targets.length > 0 && (
+          <dl className="mt-8 grid grid-cols-2 gap-x-10 gap-y-6 border-y border-line py-6 lg:grid-cols-4">
+            <Stat
+              label="State"
+              value={headlineFor(targets.map((t) => statusOf(t, health.get(t.id), now).state))}
+              note={`${targets.length} ${targets.length === 1 ? "backend" : "backends"} kept awake`}
+            />
+            <Stat label="Checks passed this week" value={rate === null ? "—" : `${rate}%`} />
+            <Stat
+              label="Closest to pausing"
+              value={
+                nearest
+                  ? (bufferText(nearest, now)?.replace(" before pause", "") ?? "—")
+                  : "Nothing"
+              }
+              note={nearest ? "if checks stopped" : "none of these pause"}
+            />
+            <Stat
+              label="Last check"
+              value={lastCheck ? ago(lastCheck, now) : "Not yet"}
+              note="checks run on their own schedule"
+            />
+          </dl>
+        )}
 
         {error && (
           <div
@@ -171,7 +208,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
           newTarget.heartbeat_type === "db_query" &&
           newTarget.secret && <Snippet secret={newTarget.secret} />}
 
-        <section className="mt-10 border-t-2 border-line pt-10">
+        <section className="mt-12">
           <h2 className="text-xl font-semibold">What we keep awake</h2>
           {targets.length === 0 ? (
             <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">
@@ -179,7 +216,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
               its database.
             </p>
           ) : (
-            <ul className="mt-5 space-y-4">
+            <ul className="mt-2 border-t border-line">
               {targets.map((t) => (
                 <TargetCard
                   key={t.id}
@@ -217,7 +254,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
           keptUrls={targets.map((t) => t.url)}
         />
 
-        <section id="add" className="mt-14 scroll-mt-8">
+        <section id="add" className="mt-16 scroll-mt-8">
           <h2 className="text-xl font-semibold">Add a backend</h2>
           <p className="mt-1 mb-5 text-[15px] text-muted">Where does this project run?</p>
           <AddTarget
