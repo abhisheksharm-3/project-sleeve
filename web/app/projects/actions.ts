@@ -2,6 +2,7 @@
 /** Every project and target mutation. Each one checks ownership, then entitlements, then writes. */
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { appwriteRowUrl, isAppwriteId } from "@/lib/appwrite";
 import { entitlements } from "@/lib/entitlements";
@@ -10,9 +11,17 @@ import { GitHubTokenMissing, githubToken, listRepos } from "@/lib/github";
 import { cadenceForSpace, parseSpaceId, resolveSpace } from "@/lib/huggingface";
 import { probeTarget } from "@/lib/probe";
 import { scanRepo } from "@/lib/repo-scan";
+import { unseal } from "@/lib/sealed";
 import { requireUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  type ActiveConnect,
+  CONNECT_COOKIE,
+  CONNECT_PATH,
+  connectConfig,
+} from "@/lib/supabase-connect";
 import { isPublicSupabaseKey } from "@/lib/supabase-key";
+import { installKeepalive, publicKey } from "@/lib/supabase-mgmt";
 import { supabaseTargetUrl, validateTargetUrl } from "@/lib/target-url";
 
 const INTERVALS = [21_600, 43_200, 86_400];
@@ -302,6 +311,58 @@ async function readTarget(
   }
 }
 
+/**
+ * Check, then save, then record: the one path every new target takes, whether it came from a
+ * form or from one-click Supabase setup. Never returns; it redirects to the project page.
+ */
+async function saveTarget(
+  userId: string,
+  projectId: string,
+  target: Omit<NewTarget, "cadence">,
+  interval: number,
+  kind: string,
+): Promise<never> {
+  const back = `/projects/${projectId}`;
+  const probe = await probeTarget({
+    platform: target.platform,
+    url: target.url,
+    heartbeat_type: target.heartbeat_type,
+    method: target.method ?? "GET",
+    secret: target.secret,
+    platform_ref: target.platform_ref ?? null,
+  });
+  const waking = !probe.ok && probe.status === null && COLD_START.includes(target.platform);
+  if (!probe.ok && !waking) {
+    const restore = probe.restoreUrl ? `&restore=${encodeURIComponent(probe.restoreUrl)}` : "";
+    redirect(
+      `${back}?add=${kind}&error=${encodeURIComponent(probe.diagnosis ?? "The check failed.")}${restore}#add`,
+    );
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("targets")
+    .insert({ ...target, project_id: projectId, interval_seconds: interval })
+    .select("id")
+    .single();
+  if (error || !data) fail(back, "Could not save the target.");
+  if (probe.ok) {
+    await admin.from("ping_log").insert({
+      target_id: data.id,
+      ok: true,
+      status_code: probe.status,
+      latency_ms: probe.latencyMs,
+    });
+  }
+
+  await track(userId, "target_added", {
+    platform: target.platform,
+    heartbeat_type: target.heartbeat_type,
+  });
+  revalidatePath(back);
+  redirect(`${back}?added=${data.id}&checked=${waking ? "waking" : probe.status}`);
+}
+
 export async function addTarget(formData: FormData) {
   const { supabase, user } = await requireUser();
   const projectId = String(formData.get("project_id") ?? "");
@@ -332,44 +393,7 @@ export async function addTarget(formData: FormData) {
     target.platform,
   );
 
-  const probe = await probeTarget({
-    platform: target.platform,
-    url: target.url,
-    heartbeat_type: target.heartbeat_type,
-    method: target.method ?? "GET",
-    secret: target.secret,
-    platform_ref: target.platform_ref ?? null,
-  });
-  const waking = !probe.ok && probe.status === null && COLD_START.includes(target.platform);
-  if (!probe.ok && !waking) {
-    const restore = probe.restoreUrl ? `&restore=${encodeURIComponent(probe.restoreUrl)}` : "";
-    redirect(
-      `${back}?add=${String(formData.get("kind") ?? "")}&error=${encodeURIComponent(probe.diagnosis ?? "The check failed.")}${restore}#add`,
-    );
-  }
-
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("targets")
-    .insert({ ...target, project_id: projectId, interval_seconds: interval })
-    .select("id")
-    .single();
-  if (error || !data) fail(back, "Could not save the target.");
-  if (probe.ok) {
-    await admin.from("ping_log").insert({
-      target_id: data.id,
-      ok: true,
-      status_code: probe.status,
-      latency_ms: probe.latencyMs,
-    });
-  }
-
-  await track(user.id, "target_added", {
-    platform: target.platform,
-    heartbeat_type: target.heartbeat_type,
-  });
-  revalidatePath(back);
-  redirect(`${back}?added=${data.id}&checked=${waking ? "waking" : probe.status}`);
+  await saveTarget(user.id, projectId, target, interval, String(formData.get("kind") ?? ""));
 }
 
 async function ownedTarget(targetId: string) {
@@ -404,4 +428,70 @@ export async function removeTarget(formData: FormData) {
   await track(user.id, "target_removed");
   revalidatePath(`/projects/${target.project_id}`);
   redirect(`/projects/${target.project_id}`);
+}
+
+const PGRST_RELOAD_TRIES = 5;
+
+/**
+ * One-click Supabase setup, step two: with the token from the sealed cookie, read the
+ * project's public key, install keepalive(), and save the target through saveTarget. The
+ * token is dropped with the cookie before the redirect.
+ */
+export async function provisionSupabase(formData: FormData) {
+  const { supabase, user } = await requireUser();
+  const config = connectConfig();
+  const jar = await cookies();
+  const active = config
+    ? unseal<ActiveConnect>(jar.get(CONNECT_COOKIE)?.value, config.clientSecret)
+    : null;
+  if (!active || active.userId !== user.id)
+    fail("/dashboard", "Your Supabase connection expired. Connect again.");
+
+  const back = `/projects/${active.projectId}`;
+  const ref = String(formData.get("ref") ?? "");
+  if (!/^[a-z0-9]{20}$/.test(ref)) fail(back, "Pick one of your Supabase projects.");
+  const { data: project } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("id", active.projectId)
+    .maybeSingle();
+  if (!project) fail("/dashboard", "That project is not yours.");
+
+  const limits = await entitlements(user.id);
+  if (!limits.canAddTarget(await countTargets(user.id))) {
+    fail(back, `The ${limits.planName} plan allows ${limits.limits.max_targets} targets.`);
+  }
+
+  let key: string | null;
+  try {
+    key = await publicKey(active.token, ref);
+    if (key) await installKeepalive(active.token, ref);
+  } catch (e) {
+    fail(`${back}?add=supabase`, e instanceof Error ? e.message : "Supabase setup failed.");
+  }
+  if (!key)
+    fail(`${back}?add=supabase`, "That project has no anon or publishable key to check it with.");
+
+  const url = `https://${ref}.supabase.co/rest/v1/rpc/keepalive`;
+  for (let i = 0; i < PGRST_RELOAD_TRIES; i++) {
+    const probe = await probeTarget({
+      platform: "supabase",
+      url,
+      heartbeat_type: "db_query",
+      method: "GET",
+      secret: key,
+      platform_ref: null,
+    });
+    if (probe.ok || probe.status !== 404) break;
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  jar.delete({ name: CONNECT_COOKIE, path: CONNECT_PATH });
+
+  await saveTarget(
+    user.id,
+    active.projectId,
+    { platform: "supabase", url, heartbeat_type: "db_query", secret: key },
+    limits.clampInterval(21_600, "supabase"),
+    "supabase",
+  );
 }

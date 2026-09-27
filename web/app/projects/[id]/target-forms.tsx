@@ -304,6 +304,9 @@ export const PLATFORMS = [
 
 /** Step one is choosing a platform; step two shows only that platform's form. */
 export function AddTarget({ kind, ...props }: FormProps & { kind: string | undefined }) {
+  const supabaseConnect = Boolean(
+    process.env.SUPABASE_OAUTH_CLIENT_ID && process.env.SUPABASE_OAUTH_CLIENT_SECRET,
+  );
   const chosen = PLATFORMS.find((p) => p.kind === kind);
   if (!chosen) {
     return (
@@ -342,6 +345,22 @@ export function AddTarget({ kind, ...props }: FormProps & { kind: string | undef
           Choose a different platform
         </Link>
       </div>
+      {chosen.kind === "supabase" && supabaseConnect && (
+        <div className="mb-8 rounded-xl border border-alive/40 bg-alive/5 p-5">
+          <p className="text-[15px] font-semibold">Let us do it for you</p>
+          <p className="mt-1 text-sm leading-relaxed text-muted">
+            Connect your Supabase account once and pick a project. We install keepalive() and add
+            the key ourselves, then let go of the access.
+          </p>
+          <a
+            href={`/connect/supabase/start?project=${props.projectId}`}
+            className="mt-4 inline-block rounded-full bg-alive px-5 py-2.5 text-sm font-semibold text-ink hover:bg-warn"
+          >
+            Connect Supabase
+          </a>
+          <p className="mt-4 text-sm text-muted">Or set it up by hand:</p>
+        </div>
+      )}
       <chosen.Form {...props} />
     </div>
   );
