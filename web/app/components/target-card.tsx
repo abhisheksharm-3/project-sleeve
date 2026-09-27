@@ -20,6 +20,7 @@ export type CardTarget = {
   method?: string;
   auto_restore?: boolean;
   maintenance?: Maintenance | null;
+  label?: string | null;
 };
 
 const DAYS = 30;
@@ -65,10 +66,20 @@ export function TargetCard({
     platform_ref: target.platform_ref ?? null,
   });
   const facts = [
-    ["How", `${capitalise(methodText(target))}, ${every(target.interval_seconds)}`],
+    [
+      "How",
+      target.heartbeat_type === "inbound"
+        ? `Expects a ping ${every(target.interval_seconds)}`
+        : `${capitalise(methodText(target))}, ${every(target.interval_seconds)}`,
+    ],
     [`Passed, ${DAYS} days`, uptime === null ? "No checks yet" : `${uptime}%`],
     ["Responds in", latencyText(health?.latency_7d)],
-    ["Pause buffer", bufferText(health, now)?.replace(" before pause", "") ?? "Never pauses"],
+    [
+      "Pause buffer",
+      target.heartbeat_type === "inbound"
+        ? "Does not pause"
+        : (bufferText(health, now)?.replace(" before pause", "") ?? "Never pauses"),
+    ],
   ] as const;
   return (
     <li className="border-b border-line py-6">
@@ -100,6 +111,17 @@ export function TargetCard({
           </span>
           {autoRestoreControl}
         </p>
+      )}
+      {target.heartbeat_type === "inbound" && (
+        <div className="mt-4 space-y-2">
+          <p className="text-sm text-muted">
+            Add this as the last step of the job. It works with any HTTP method; add{" "}
+            <span className="font-mono text-[13px] text-text">/fail</span> to report a failed run.
+          </p>
+          <pre className="overflow-x-auto rounded-xl border border-line bg-ink p-3 font-mono text-[13px] select-all">
+            curl -fsS --retry 3 {target.url}
+          </pre>
+        </div>
       )}
       {warning && <p className="mt-3 text-sm text-warn">{warning}</p>}
       {status.state === "paused" && restore && (

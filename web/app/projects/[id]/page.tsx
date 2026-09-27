@@ -28,6 +28,7 @@ type Target = {
   platform_ref: string | null;
   method: string;
   auto_restore: boolean;
+  label: string | null;
 };
 
 /** Render's 15-minute sleep is reset by every check, so only day-long windows can run out. */
@@ -93,7 +94,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
   const { data: project } = await supabase
     .from("projects")
     .select(
-      "id, name, repo_url, github_id, scan, scanned_at, public, targets (id, url, platform, heartbeat_type, interval_seconds, secret, platform_ref, method, auto_restore)",
+      "id, name, repo_url, github_id, scan, scanned_at, public, targets (id, url, platform, heartbeat_type, interval_seconds, secret, platform_ref, method, auto_restore, label)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -202,9 +203,11 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
           >
             {checked === "waking"
               ? "Saved. It took a while to answer, which usually means it was asleep and is waking up now. The next check will confirm."
-              : checked === "connected"
-                ? "Saved, and the first connection worked. It is being kept awake from now on."
-                : `Saved, and the first check passed (${checked}). It is being kept awake from now on.`}
+              : checked === "heartbeat"
+                ? "Created. Add the curl line below to the end of the job; the first ping switches it on."
+                : checked === "connected"
+                  ? "Saved, and the first connection worked. It is being kept awake from now on."
+                  : `Saved, and the first check passed (${checked}). It is being kept awake from now on.`}
           </p>
         )}
         {queued && (

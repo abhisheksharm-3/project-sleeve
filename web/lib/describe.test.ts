@@ -89,7 +89,10 @@ test("statusOf gives one headline and one sentence per state", () => {
 test("statusOf: maintenance outranks failure and says checks still run", () => {
   const failingRow = { ...ok, failures_since_ok: 5 };
   const s = statusOf(
-    { ...site, maintenance: { ends_at: new Date(NOW + 2 * 3_600_000).toISOString(), note: "Region move" } },
+    {
+      ...site,
+      maintenance: { ends_at: new Date(NOW + 2 * 3_600_000).toISOString(), note: "Region move" },
+    },
     failingRow,
     NOW,
   );

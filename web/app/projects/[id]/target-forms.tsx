@@ -3,6 +3,7 @@ import Link from "next/link";
 import { addTarget } from "@/app/projects/actions";
 import { APPWRITE_COLUMN, APPWRITE_TABLE_NAME } from "@/lib/appwrite";
 import { every } from "@/lib/format";
+import { HEARTBEAT_PERIODS } from "@/lib/heartbeat";
 import { KEEPALIVE_SQL } from "@/lib/target-url";
 
 const FIELD =
@@ -174,6 +175,34 @@ function AtlasForm({ projectId, prefill }: FormProps) {
           Keep it awake
         </button>
       </div>
+    </form>
+  );
+}
+
+function HeartbeatForm({ projectId }: FormProps) {
+  return (
+    <form action={addTarget} className="max-w-2xl space-y-4">
+      <Hidden projectId={projectId} kind="heartbeat" />
+      <p className="text-sm text-muted">
+        For a cron job, a backup script or a queue worker: it pings a URL we give you each time it
+        runs, and you hear from us when a ping does not arrive on time.
+      </p>
+      <Field id="label" label="Name" placeholder="Nightly backup" maxLength={80} />
+      <div>
+        <label className={LABEL} htmlFor="period">
+          It runs
+        </label>
+        <select id="period" name="period" className={FIELD} defaultValue="86400">
+          {HEARTBEAT_PERIODS.map((p) => (
+            <option key={p.seconds} value={p.seconds}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <button type="submit" className={BUTTON}>
+        Create heartbeat
+      </button>
     </form>
   );
 }
@@ -406,6 +435,12 @@ export const PLATFORMS = [
     Form: KoyebForm,
   },
   {
+    kind: "heartbeat",
+    name: "Scheduled job",
+    blurb: "Your cron or script pings us; we tell you when it goes quiet.",
+    Form: HeartbeatForm,
+  },
+  {
     kind: "custom",
     name: "Something else",
     blurb: "Any URL, or a route in your own app.",
@@ -427,9 +462,7 @@ export function AddTarget({ kind, ...props }: FormProps & { kind: string | undef
             key={p.kind}
             href={`?add=${p.kind}#add`}
             scroll={false}
-            className={`group flex gap-3 bg-ink p-5 transition-colors hover:bg-surface ${
-              p.kind === "custom" ? "lg:col-span-2" : ""
-            }`}
+            className="group flex gap-3 bg-ink p-5 transition-colors hover:bg-surface"
           >
             <span
               aria-hidden

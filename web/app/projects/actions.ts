@@ -8,12 +8,14 @@ import { appwriteRowUrl, isAppwriteId } from "@/lib/appwrite";
 import { entitlements } from "@/lib/entitlements";
 import { track } from "@/lib/events";
 import { GitHubTokenMissing, githubToken, installationAccess, listRepos } from "@/lib/github";
+import { HEARTBEAT_PERIODS } from "@/lib/heartbeat";
 import { cadenceForSpace, parseSpaceId, resolveSpace } from "@/lib/huggingface";
 import { parseAtlasUri } from "@/lib/mongodb";
 import { probeTarget } from "@/lib/probe";
 import { scanRepo } from "@/lib/repo-scan";
 import { unseal } from "@/lib/sealed";
 import { requireUser } from "@/lib/session";
+import { siteUrl } from "@/lib/site-url";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   type ActiveConnect,
@@ -170,6 +172,7 @@ type NewTarget = {
   platform_ref?: string;
   pause_window_seconds?: number;
   auto_restore?: boolean;
+  label?: string;
 };
 
 const RENDER_CADENCE = 600;
@@ -289,6 +292,29 @@ async function readAtlasTarget(formData: FormData, back: string): Promise<NewTar
   };
 }
 
+/**
+ * An inbound heartbeat: the user's job pings a URL holding a random token, and silence past
+ * the period plus grace is the failure. Nothing is probed; the first ping arrives later.
+ */
+async function readHeartbeatTarget(formData: FormData, back: string): Promise<NewTarget> {
+  const label = String(formData.get("label") ?? "")
+    .trim()
+    .slice(0, 80);
+  if (!label) fail(back, "Name the job, so its alerts say which one went quiet.");
+  const period = Number(formData.get("period"));
+  if (!HEARTBEAT_PERIODS.some((p) => p.seconds === period))
+    fail(back, "Pick how often the job runs.");
+  const token = randomBytes(32).toString("base64url");
+  return {
+    platform: "heartbeat",
+    url: `${siteUrl()}/h/${token}`,
+    heartbeat_type: "inbound",
+    secret: token,
+    label,
+    cadence: period,
+  };
+}
+
 /** Koyeb's free instance sleeps after an hour without HTTP traffic; a visit resets it. */
 async function readKoyebTarget(formData: FormData, back: string): Promise<NewTarget> {
   const check = await validateTargetUrl(String(formData.get("url") ?? ""));
@@ -352,6 +378,8 @@ async function readTarget(
       return readAtlasTarget(formData, back);
     case "koyeb":
       return readKoyebTarget(formData, back);
+    case "heartbeat":
+      return readHeartbeatTarget(formData, back);
     default:
       return readCustomTarget(formData, back, allowed);
   }
@@ -369,16 +397,20 @@ async function saveTarget(
   kind: string,
 ): Promise<never> {
   const back = `/projects/${projectId}`;
-  const probe = await probeTarget({
-    platform: target.platform,
-    url: target.url,
-    heartbeat_type: target.heartbeat_type,
-    method: target.method ?? "GET",
-    secret: target.secret,
-    platform_ref: target.platform_ref ?? null,
-  });
-  const waking = !probe.ok && probe.status === null && COLD_START.includes(target.platform);
-  if (!probe.ok && !waking) {
+  const probe =
+    target.heartbeat_type === "inbound"
+      ? null
+      : await probeTarget({
+          platform: target.platform,
+          url: target.url,
+          heartbeat_type: target.heartbeat_type,
+          method: target.method ?? "GET",
+          secret: target.secret,
+          platform_ref: target.platform_ref ?? null,
+        });
+  const waking =
+    probe !== null && !probe.ok && probe.status === null && COLD_START.includes(target.platform);
+  if (probe && !probe.ok && !waking) {
     const restore = probe.restoreUrl ? `&restore=${encodeURIComponent(probe.restoreUrl)}` : "";
     redirect(
       `${back}?add=${kind}&error=${encodeURIComponent(probe.diagnosis ?? "The check failed.")}${restore}#add`,
@@ -392,7 +424,7 @@ async function saveTarget(
     .select("id")
     .single();
   if (error || !data) fail(back, "Could not save the target.");
-  if (probe.ok) {
+  if (probe?.ok) {
     await admin.from("ping_log").insert({
       target_id: data.id,
       ok: true,
@@ -406,7 +438,8 @@ async function saveTarget(
     heartbeat_type: target.heartbeat_type,
   });
   revalidatePath(back);
-  redirect(`${back}?added=${data.id}&checked=${waking ? "waking" : (probe.status ?? "connected")}`);
+  const checked = !probe ? "heartbeat" : waking ? "waking" : (probe.status ?? "connected");
+  redirect(`${back}?added=${data.id}&checked=${checked}`);
 }
 
 export async function addTarget(formData: FormData) {

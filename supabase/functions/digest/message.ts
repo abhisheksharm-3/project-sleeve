@@ -24,6 +24,7 @@ const KIND: Record<string, string> = {
   appwrite: "Appwrite project",
   mongodb: "MongoDB Atlas cluster",
   koyeb: "Koyeb service",
+  heartbeat: "scheduled job",
   custom: "Website",
 };
 const DAY_S = 86_400;

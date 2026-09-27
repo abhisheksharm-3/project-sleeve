@@ -64,6 +64,7 @@ type TargetRow = {
   url: string;
   platform: string;
   heartbeat_type: string;
+  label: string | null;
   projects: { name: string } | null;
 };
 type ItemRow = { label: string | null; position: number; targets: TargetRow | null };
@@ -83,7 +84,7 @@ function overallOf(items: PageItem[]): Overall {
 
 /** "inquora Supabase database": the project keeps same-kind backends apart. */
 export function defaultLabel(
-  t: Pick<TargetRow, "url" | "platform" | "heartbeat_type" | "projects">,
+  t: Pick<TargetRow, "url" | "platform" | "heartbeat_type" | "label" | "projects">,
 ) {
   const repo = t.projects?.name.split("/").pop();
   const title = targetTitle(t).title;
@@ -116,7 +117,9 @@ export async function loadStatusPage(
   const [{ data: itemRows }, { data: noticeRows }] = await Promise.all([
     admin
       .from("status_page_items")
-      .select("label, position, targets (id, url, platform, heartbeat_type, projects (name))")
+      .select(
+        "label, position, targets (id, url, platform, heartbeat_type, label, projects (name))",
+      )
       .eq("page_id", page.id)
       .order("position"),
     admin

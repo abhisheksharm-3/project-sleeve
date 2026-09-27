@@ -21,13 +21,14 @@ const DAY_S = 86_400;
 
 /**
  * Worst condition wins: a project past its pause deadline is paused even if the latest ping
- * failed for another reason. Mirrors alert_conditions in SQL, so the badge and the alert agree.
+ * failed for another reason. Mirrors alert_conditions in SQL, so the badge and the alert agree:
+ * `streak` is 3 failed checks for pinged backends and 1 missed ping for inbound heartbeats.
  */
-export function stateOf(h: Health | undefined, now = Date.now()): State {
+export function stateOf(h: Health | undefined, now = Date.now(), streak = FAILING_STREAK): State {
   if (!h?.last_ping_at) return "idle";
   const pauseAt = h.pause_at ? Date.parse(h.pause_at) : null;
   if (pauseAt !== null && pauseAt <= now) return "paused";
-  if (h.failures_since_ok >= FAILING_STREAK) return "failing";
+  if (h.failures_since_ok >= streak) return "failing";
   if (pauseAt !== null && (h.pause_window_seconds ?? 0) >= DAY_S && pauseAt - now < PAUSE_SOON_MS)
     return "pause_soon";
   return "alive";

@@ -8,6 +8,8 @@ export type Describable = {
   url: string;
   platform: string;
   heartbeat_type: string;
+  /** The user's name for it; heartbeats have no URL to describe them. */
+  label?: string | null;
   /** The window in force now, if any. */
   maintenance?: Maintenance | null;
 };
@@ -28,6 +30,7 @@ export const PLATFORM_NAMES: Record<string, string> = {
   railway: "Railway",
   mongodb: "MongoDB Atlas",
   koyeb: "Koyeb",
+  heartbeat: "Heartbeat",
   custom: "Website",
 };
 
@@ -53,6 +56,7 @@ export function methodText(t: Describable): string {
     return `reads one row from ${path.split("/").pop()}`;
   }
   if (t.platform === "appwrite") return "writes one heartbeat row";
+  if (t.heartbeat_type === "inbound") return "waits for your job to ping it";
   if (t.platform === "mongodb") return "connects to your cluster and pings it";
   if (t.heartbeat_type === "db_query") return "calls your keepalive route";
   return "visits the page";
@@ -68,6 +72,8 @@ export function targetTitle(t: Describable): { title: string; detail: string } {
   if (t.platform === "appwrite") return { title: "Appwrite project", detail: h.split(".")[0] };
   if (t.platform === "mongodb") return { title: "MongoDB Atlas cluster", detail: h.split(".")[0] };
   if (t.platform === "koyeb") return { title: "Koyeb service", detail: h };
+  if (t.heartbeat_type === "inbound")
+    return { title: t.label?.trim() || "Scheduled job", detail: "heartbeat" };
   return { title: t.heartbeat_type === "db_query" ? "App backend" : "Website", detail: h };
 }
 
@@ -83,6 +89,19 @@ export function caveat(t: Describable): string | null {
 
 export type Status = { state: State; headline: string; sentence: string };
 
+function heartbeatStatus(state: State, h: Health | undefined, now: number): Status {
+  const last = h?.last_ok_at ? ` The last ping came ${ago(h.last_ok_at, now)}.` : "";
+  if (state === "idle")
+    return { state, headline: "Waiting", sentence: "Waiting for the first ping from your job." };
+  if (state === "failing")
+    return {
+      state,
+      headline: "Missed",
+      sentence: `No ping arrived when one was due, or the job reported a failure.${last}`,
+    };
+  return { state, headline: "On time", sentence: `Pinging on schedule.${last}` };
+}
+
 /** Maintenance outranks every other state while it lasts: the owner said to expect trouble. */
 export function statusOf(t: Describable, h: Health | undefined, now = Date.now()): Status {
   if (t.maintenance && Date.parse(t.maintenance.ends_at) > now)
@@ -91,7 +110,9 @@ export function statusOf(t: Describable, h: Health | undefined, now = Date.now()
       headline: "Maintenance",
       sentence: `Planned maintenance for another ${forAnother(Date.parse(t.maintenance.ends_at) - now)}${t.maintenance.note ? `: ${t.maintenance.note}` : ""}. Checks still run; alerts wait until it ends.`,
     };
-  const state = stateOf(h, now);
+  const inbound = t.heartbeat_type === "inbound";
+  const state = stateOf(h, now, inbound ? 1 : 3);
+  if (inbound) return heartbeatStatus(state, h, now);
   const platform = PLATFORM_NAMES[t.platform] ?? t.platform;
   const checked = h?.last_ping_at ? `Checked ${ago(h.last_ping_at, now)}.` : "";
   const buffer = bufferText(h, now);

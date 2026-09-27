@@ -3,7 +3,7 @@ import { AppHeader } from "@/app/components/app-header";
 import { latencyText, Stat } from "@/app/components/stat";
 import { statusOf, targetTitle } from "@/lib/describe";
 import { entitlements } from "@/lib/entitlements";
-import { ago } from "@/lib/format";
+import { ago, every } from "@/lib/format";
 import { bufferText, passRate, type State } from "@/lib/health";
 import { loadHealth } from "@/lib/load-health";
 import { requireUser } from "@/lib/session";
@@ -17,6 +17,7 @@ type Target = {
   platform: string;
   heartbeat_type: string;
   interval_seconds: number;
+  label: string | null;
 };
 type Project = { id: string; name: string; last_commit_at: string | null; targets: Target[] };
 
@@ -51,7 +52,7 @@ export default async function DashboardPage() {
     supabase
       .from("projects")
       .select(
-        "id, name, last_commit_at, targets (id, url, platform, heartbeat_type, interval_seconds)",
+        "id, name, last_commit_at, targets (id, url, platform, heartbeat_type, interval_seconds, label)",
       )
       .eq("archived", false)
       .order("created_at", { ascending: true }),
@@ -128,7 +129,10 @@ export default async function DashboardPage() {
             cells: dayCells(rows, DAYS, now),
             uptime: uptime === null ? "—" : `${uptime}%`,
             latency: latencyText(h?.latency_7d),
-            buffer: bufferText(h, now)?.replace(" before pause", "") ?? "Never pauses",
+            buffer:
+              t.heartbeat_type === "inbound"
+                ? every(t.interval_seconds).replace("every", "Every")
+                : (bufferText(h, now)?.replace(" before pause", "") ?? "Never pauses"),
           };
         }),
     };
