@@ -82,40 +82,9 @@ export default async function DashboardPage() {
       <AppHeader session={session} />
       <main className="w-full flex-1 px-6 pb-16 sm:px-10 lg:px-16">
         <section className="flex flex-wrap items-end justify-between gap-6 pt-10">
-          <div className="max-w-3xl">
-            <h1 className="text-4xl font-semibold sm:text-5xl">
-              {headline(targets.length, trouble.length)}
-            </h1>
-            <div className="mt-5 space-y-1.5 text-[15px] leading-relaxed text-muted">
-              {rate !== null && (
-                <p>
-                  <span className="text-text">{rate}%</span> of checks passed across your{" "}
-                  {projects.length} projects this week.
-                </p>
-              )}
-              {nearest && nearestProject && (
-                <p>
-                  If checks stopped, the first to pause would be{" "}
-                  {splitName(nearestProject.name).repo}&apos;s {targetTitle(nearest).title}, in{" "}
-                  <span className="text-text">
-                    {bufferText(health.get(nearest.id), now)?.replace(" before pause", "")}
-                  </span>
-                  .
-                </p>
-              )}
-              {byPlatform.size > 1 && (
-                <p>
-                  {[...byPlatform]
-                    .map(
-                      ([p, rows]) =>
-                        `${PLATFORM_NAMES[p] ?? p}: ${rows.length} ${rows.length === 1 ? "backend" : "backends"}, ${passRate(rows) ?? 0}% of checks passed`,
-                    )
-                    .join(". ")}
-                  .
-                </p>
-              )}
-            </div>
-          </div>
+          <h1 className="text-4xl font-semibold sm:text-5xl">
+            {headline(targets.length, trouble.length)}
+          </h1>
           <div className="flex items-center gap-5">
             <span className="text-sm text-muted">
               {targets.length} of {limits.limits.max_targets} backends on {limits.planName}
@@ -128,6 +97,55 @@ export default async function DashboardPage() {
             </Link>
           </div>
         </section>
+
+        {targets.length > 0 && (
+          <dl className="mt-8 grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-3">
+            <div className="bg-surface p-5">
+              <dt className="text-sm text-muted">Checks passed this week</dt>
+              <dd className="mt-1 text-3xl font-semibold tabular-nums">
+                {rate === null ? "—" : `${rate}%`}
+              </dd>
+            </div>
+            <div className="bg-surface p-5">
+              <dt className="text-sm text-muted">First to pause if checks stopped</dt>
+              <dd className="mt-1 text-3xl font-semibold tabular-nums">
+                {nearest
+                  ? (bufferText(health.get(nearest.id), now)?.replace(" before pause", "") ?? "—")
+                  : "—"}
+              </dd>
+              {nearest && nearestProject && (
+                <p className="mt-0.5 truncate text-sm text-muted">
+                  {splitName(nearestProject.name).repo}&apos;s {targetTitle(nearest).title}
+                </p>
+              )}
+            </div>
+            <div className="bg-surface p-5">
+              <dt className="text-sm text-muted">Kept awake</dt>
+              <dd className="mt-1 text-3xl font-semibold tabular-nums">
+                {targets.length - trouble.length}
+                <span className="text-lg font-normal text-muted"> of {targets.length}</span>
+              </dd>
+              <p className="mt-0.5 text-sm text-muted">across {projects.length} projects</p>
+            </div>
+          </dl>
+        )}
+
+        {byPlatform.size > 1 && (
+          <ul className="mt-4 flex flex-wrap gap-2">
+            {[...byPlatform].map(([p, rows]) => (
+              <li
+                key={p}
+                className="flex items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-1.5 text-sm"
+              >
+                <span className="font-medium">{PLATFORM_NAMES[p] ?? p}</span>
+                <span className="text-muted">
+                  {rows.length} {rows.length === 1 ? "backend" : "backends"}, {passRate(rows) ?? 0}%
+                  passed
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
 
         {trouble.length > 0 && (
           <section className="mt-10 rounded-2xl border border-dead/40 bg-dead/10 p-5">
@@ -158,22 +176,28 @@ export default async function DashboardPage() {
             </p>
           </section>
         ) : (
-          <section aria-label="Projects" className="mt-14">
-            <div className="flex flex-wrap items-end gap-x-5 gap-y-10 border-b-2 border-line pb-0">
-              {projects.map((project) => {
-                const { owner, repo } = splitName(project.name);
-                const list = [...(project.targets ?? [])].sort(
-                  (a, b) =>
-                    RANK[status.get(a.id)?.state ?? "idle"] -
-                    RANK[status.get(b.id)?.state ?? "idle"],
-                );
-                const worst = list[0] ? status.get(list[0].id) : undefined;
-                return (
+          <section
+            aria-label="Projects"
+            className="mt-14 grid grid-cols-1 gap-x-5 gap-y-12 sm:grid-cols-2 xl:grid-cols-3"
+          >
+            {projects.map((project) => {
+              const { owner, repo } = splitName(project.name);
+              const list = [...(project.targets ?? [])].sort(
+                (a, b) =>
+                  RANK[status.get(a.id)?.state ?? "idle"] - RANK[status.get(b.id)?.state ?? "idle"],
+              );
+              const worst = list[0] ? status.get(list[0].id) : undefined;
+              const rows = list.map((t) => health.get(t.id)).filter((h): h is Health => !!h);
+              const projectRate = passRate(rows);
+              const nextPause = list
+                .map((t) => health.get(t.id))
+                .filter((h): h is Health => !!h?.pause_at && Date.parse(h.pause_at) > now)
+                .sort((x, y) => Date.parse(x.pause_at ?? "") - Date.parse(y.pause_at ?? ""))[0];
+              return (
+                <div key={project.id} className="flex flex-col justify-end">
                   <Link
-                    key={project.id}
                     href={`/projects/${project.id}`}
-                    className="group relative w-full rounded-t-xl border border-b-0 border-line bg-surface px-5 pt-5 pb-6 transition-colors hover:border-alive/50 sm:w-[300px]"
-                    style={{ minHeight: `${150 + list.length * 46}px` }}
+                    className="group relative block rounded-t-xl border border-b-0 border-line bg-surface px-5 pt-5 pb-5 transition-colors hover:border-alive/50"
                   >
                     <span
                       aria-hidden
@@ -190,43 +214,64 @@ export default async function DashboardPage() {
                       </span>
                     </div>
                     {owner && <p className="text-xs text-muted">{owner}</p>}
+
                     {list.length === 0 ? (
-                      <div className="mt-6">
-                        <div className="flex gap-2">
-                          <span className="window-dark h-6 w-[18px] rounded-[3px]" />
-                          <span className="window-dark h-6 w-[18px] rounded-[3px]" />
+                      <>
+                        <div aria-hidden className="mt-5 flex gap-2">
+                          <span className="window-dark h-10 w-7 rounded-[4px]" />
+                          <span className="window-dark h-10 w-7 rounded-[4px]" />
                         </div>
-                        <p className="mt-3 text-sm text-warn">
+                        <p className="mt-4 text-sm text-warn">
                           No lights yet. Add the backend to keep awake.
                         </p>
-                      </div>
+                      </>
                     ) : (
-                      <ul className="mt-5 space-y-3">
-                        {list.map((t) => {
-                          const s = status.get(t.id);
-                          return (
-                            <li key={t.id} className="flex items-center gap-3">
-                              <Window state={s?.state ?? "idle"} />
-                              <span className="min-w-0">
-                                <span className="block truncate text-sm">
-                                  {targetTitle(t).title}
-                                </span>
-                                <span className="block truncate text-xs text-muted">
-                                  {s?.headline}
-                                </span>
+                      <>
+                        <div aria-hidden className="mt-5 flex flex-wrap gap-2">
+                          {list.map((t) => (
+                            <Window
+                              key={t.id}
+                              state={status.get(t.id)?.state ?? "idle"}
+                              size="lg"
+                            />
+                          ))}
+                        </div>
+                        <ul className="mt-4 space-y-1.5">
+                          {list.map((t) => (
+                            <li
+                              key={t.id}
+                              className="flex items-baseline justify-between gap-3 text-sm"
+                            >
+                              <span className="truncate">{targetTitle(t).title}</span>
+                              <span className="shrink-0 text-muted">
+                                {status.get(t.id)?.headline}
                               </span>
                             </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                    {worst && TROUBLE.includes(worst.state) && (
-                      <p className="mt-4 text-xs text-dead">{worst.sentence}</p>
+                          ))}
+                        </ul>
+                        {worst && TROUBLE.includes(worst.state) ? (
+                          <p className="mt-4 text-sm text-dead">{worst.sentence}</p>
+                        ) : (
+                          <p className="mt-4 text-sm text-muted">
+                            {projectRate !== null && (
+                              <span className="text-text">{projectRate}% passed</span>
+                            )}
+                            {projectRate !== null && nextPause && ". "}
+                            {nextPause && (
+                              <>
+                                would pause in{" "}
+                                {bufferText(nextPause, now)?.replace(" before pause", "")}
+                              </>
+                            )}
+                          </p>
+                        )}
+                      </>
                     )}
                   </Link>
-                );
-              })}
-            </div>
+                  <div aria-hidden className="-mx-2.5 h-0.5 bg-line" />
+                </div>
+              );
+            })}
           </section>
         )}
       </main>
