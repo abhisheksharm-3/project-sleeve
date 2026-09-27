@@ -11,7 +11,7 @@ import { type NextRequest, NextResponse } from "next/server";
  */
 /** Everything else requires a session. "/" is the public landing page. */
 const PUBLIC_PREFIXES = ["/login", "/auth", "/status/", "/badge/"];
-const PUBLIC_EXACT = ["/"];
+const PUBLIC_EXACT = ["/", "/opengraph-image", "/apple-icon"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });

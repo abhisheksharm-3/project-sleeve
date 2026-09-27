@@ -7,7 +7,7 @@
  * height (every building sits in a slot that tall), so any building that does not fit drops out whole instead of being squeezed or
  * sliced at the edge, and the ones that fit spread to fill the width.
  */
-const BUILDINGS = [
+export const BUILDINGS = [
   { id: "b1", cols: 3, rows: 4 },
   { id: "b2", cols: 4, rows: 7 },
   { id: "b3", cols: 2, rows: 3 },
@@ -24,8 +24,8 @@ const BUILDINGS = [
 ];
 
 const FLICKER = "4-2-1";
-const DARK = "1-5-2";
-const UNLIT = new Set([
+export const DARK = "1-5-2";
+export const UNLIT = new Set([
   "0-0-2",
   "3-1-4",
   "5-3-0",
