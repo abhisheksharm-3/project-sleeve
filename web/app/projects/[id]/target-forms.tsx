@@ -361,7 +361,7 @@ export function AddTarget({ kind, ...props }: FormProps & { kind: string | undef
           <p className="mt-4 text-sm text-muted">Or set it up by hand:</p>
         </div>
       )}
-      <chosen.Form {...props} />
+      <chosen.Form key={JSON.stringify(props.prefill)} {...props} />
     </div>
   );
 }

@@ -153,7 +153,6 @@ export function FoundPanel({
                   ) : (
                     <Link
                       href={f.href}
-                      scroll={false}
                       className="rounded-full bg-alive px-4 py-2 text-sm font-semibold text-ink transition-colors hover:bg-warn"
                     >
                       Keep it awake
