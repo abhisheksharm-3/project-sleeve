@@ -7,6 +7,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DayWindows } from "@/app/components/day-windows";
 import { Sparkline } from "@/app/components/sparkline";
+import { Stat } from "@/app/components/stat";
 import type { State } from "@/lib/health";
 import {
   HISTORY_DAYS,
@@ -126,6 +127,12 @@ function history(page: StatusPageView, now: number): HistoryEntry[] {
   return [...outages, ...resolved].sort((a, b) => b.at.localeCompare(a.at));
 }
 
+function mean(values: (number | null)[]): number | null {
+  const known = values.filter((v): v is number => v !== null);
+  if (!known.length) return null;
+  return Math.round((known.reduce((a, b) => a + b, 0) / known.length) * 10) / 10;
+}
+
 export default async function PublicStatusPage({ params }: PageProps<"/s/[slug]">) {
   const page = await load((await params).slug);
   if (!page) notFound();
@@ -133,10 +140,25 @@ export default async function PublicStatusPage({ params }: PageProps<"/s/[slug]"
   const overall = OVERALL[page.overall];
   const open = page.notices.filter((n) => !n.resolved_at);
   const past = history(page, now);
+  const uptime90 = mean(page.items.map((i) => i.uptime.d90));
+  const uptime30 = mean(page.items.map((i) => i.uptime.d30));
+  const latency = mean(page.items.map((i) => i.latencyNow));
 
   return (
-    <main className="flex min-h-full flex-1 flex-col px-4 py-10 sm:px-10 lg:px-16">
-      <div className="mx-auto w-full max-w-3xl flex-1">
+    <div className="flex min-h-full flex-1 flex-col">
+      <header className="border-b border-line">
+        <div className="mx-auto flex h-14 w-full max-w-4xl items-center justify-between gap-4 px-4 sm:px-6">
+          <span className="flex min-w-0 items-center gap-2.5">
+            <span aria-hidden className={`h-3.5 w-2.5 shrink-0 rounded-[2px] ${overall.window}`} />
+            <span className="text-[15px] font-semibold">Status</span>
+          </span>
+          <span className="shrink-0 text-sm text-muted">
+            Updated {when(new Date(now).toISOString())}
+          </span>
+        </div>
+      </header>
+
+      <main className="mx-auto w-full max-w-4xl flex-1 px-4 pt-12 pb-16 sm:px-6">
         {!page.published && (
           <p className="mb-8 rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-[15px] text-warn">
             Draft. Only you can see this page until you publish it.
@@ -146,17 +168,37 @@ export default async function PublicStatusPage({ params }: PageProps<"/s/[slug]"
         {page.description && (
           <p className="mt-3 max-w-2xl text-lg leading-relaxed text-muted">{page.description}</p>
         )}
+        <p className={`mt-8 flex items-center gap-3 text-2xl font-semibold ${overall.tone}`}>
+          <span aria-hidden className={`h-7 w-5 shrink-0 rounded-[3px] ${overall.window}`} />
+          {overall.text}
+        </p>
 
-        <section className="mt-10 flex items-center gap-5 rounded-2xl border border-line bg-surface p-6">
-          <span aria-hidden className={`h-14 w-10 shrink-0 rounded-[5px] ${overall.window}`} />
-          <div>
-            <p className={`text-2xl font-semibold ${overall.tone}`}>{overall.text}</p>
-            <p className="mt-1 text-sm text-muted">Checked {when(new Date(now).toISOString())}</p>
-          </div>
-        </section>
+        {page.items.length > 0 && (page.showUptime || page.showResponseTime) && (
+          <dl className="mt-10 grid grid-cols-2 gap-x-10 gap-y-6 border-y border-line py-6 sm:grid-cols-4">
+            {page.showUptime && (
+              <>
+                <Stat label={`Uptime, ${HISTORY_DAYS} days`} value={percent(uptime90)} />
+                <Stat label="Uptime, 30 days" value={percent(uptime30)} />
+              </>
+            )}
+            {page.showResponseTime && (
+              <Stat
+                label="Average response"
+                value={latencyText(latency === null ? null : Math.round(latency)) ?? "—"}
+              />
+            )}
+            {page.showOutages && (
+              <Stat
+                label={`Outages, ${HISTORY_DAYS} days`}
+                value={String(page.outages.length)}
+                note={page.outages.some((o) => !o.endedAt) ? "one is ongoing" : undefined}
+              />
+            )}
+          </dl>
+        )}
 
         {open.length > 0 && (
-          <section aria-label="Current notices" className="mt-6 space-y-4">
+          <section aria-label="Current notices" className="mt-10 space-y-4">
             {open.map((n) => (
               <NoticeCard key={n.id} notice={n} />
             ))}
@@ -164,63 +206,50 @@ export default async function PublicStatusPage({ params }: PageProps<"/s/[slug]"
         )}
 
         {page.items.length > 0 && (
-          <section className="mt-12">
-            <div className="flex items-baseline justify-between gap-4">
-              <h2 className="text-xl font-semibold">Backends</h2>
-              <p className="text-sm text-muted">
-                <span className="max-sm:hidden">Last {HISTORY_DAYS} days</span>
-                <span className="sm:hidden">Last 30 days</span>
-              </p>
+          <section className="mt-14">
+            <h2 className="text-xl font-semibold">Backends</h2>
+            <div
+              aria-hidden
+              className="mt-6 flex justify-between border-b border-line pb-2 text-xs text-muted"
+            >
+              <span className="max-sm:hidden">{HISTORY_DAYS} days ago</span>
+              <span className="sm:hidden">30 days ago</span>
+              <span>Today</span>
             </div>
-            <ul className="mt-5 divide-y divide-line rounded-2xl border border-line bg-surface">
+            <ul>
               {page.items.map((item) => {
                 const word =
                   item.lastFailed && !DOWN_WORDS.includes(item.state)
                     ? { text: "Last check failed", tone: "text-warn" }
                     : STATE_WORD[item.state];
-                const latency = latencyText(item.latencyNow);
+                const ms = latencyText(item.latencyNow);
                 return (
-                  <li key={item.key} className="px-5 py-4 sm:px-6">
-                    <div className="flex items-baseline justify-between gap-4">
-                      <h3 className="truncate text-[15px] font-semibold">{item.label}</h3>
-                      <p className={`shrink-0 text-sm font-medium ${word.tone}`}>{word.text}</p>
+                  <li key={item.key} className="border-b border-line py-4">
+                    <div className="flex items-baseline gap-4">
+                      <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold">
+                        {item.label}
+                      </h3>
+                      {page.showUptime && (
+                        <span className="text-sm tabular-nums">{percent(item.uptime.d90)}</span>
+                      )}
+                      <span className={`shrink-0 text-right text-sm font-medium sm:w-28 ${word.tone}`}>
+                        {word.text}
+                      </span>
                     </div>
-                    <div className="mt-2.5">
-                      <DayWindows cells={item.cells} mobileDays={30} className="h-6" />
+                    <div className="mt-3">
+                      <DayWindows cells={item.cells} mobileDays={30} className="h-8" />
                     </div>
-                    {(page.showUptime || (page.showResponseTime && latency)) && (
-                      <div className="mt-2.5 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted">
-                        {page.showUptime &&
-                          (
-                            [
-                              ["7d", item.uptime.d7],
-                              ["30d", item.uptime.d30],
-                              [`${HISTORY_DAYS}d`, item.uptime.d90],
-                            ] as const
-                          ).map(([label, value]) => (
-                            <span key={label} className={label === "30d" ? "max-sm:hidden" : ""}>
-                              <span className="font-semibold text-text tabular-nums">
-                                {percent(value)}
-                              </span>{" "}
-                              over {label.replace("d", " days")}
-                            </span>
-                          ))}
-                        {page.showResponseTime && latency && (
-                          <span className="flex min-w-40 flex-1 items-center gap-3 sm:justify-end">
-                            <span className="shrink-0">
-                              Responds in{" "}
-                              <span className="font-semibold text-text tabular-nums">
-                                {latency}
-                              </span>
-                            </span>
-                            <span className="w-full max-w-48">
-                              <Sparkline
-                                values={item.latency}
-                                label={`Daily response time for ${item.label} over 30 days`}
-                              />
-                            </span>
-                          </span>
-                        )}
+                    {page.showResponseTime && ms && (
+                      <div className="mt-3 flex items-center gap-4 text-sm text-muted">
+                        <span className="shrink-0">
+                          Responds in <span className="text-text tabular-nums">{ms}</span>
+                        </span>
+                        <span className="w-full max-w-40">
+                          <Sparkline
+                            values={item.latency}
+                            label={`Daily response time for ${item.label} over 30 days`}
+                          />
+                        </span>
                       </div>
                     )}
                   </li>
@@ -230,8 +259,8 @@ export default async function PublicStatusPage({ params }: PageProps<"/s/[slug]"
           </section>
         )}
 
-        {(page.showOutages || page.notices.length > 0) && (
-          <section className="mt-12">
+        {(page.showOutages || page.notices.some((n) => n.resolved_at)) && (
+          <section className="mt-14">
             <h2 className="text-xl font-semibold">History</h2>
             {past.length === 0 ? (
               <p className="mt-3 text-[15px] text-muted">
@@ -249,14 +278,18 @@ export default async function PublicStatusPage({ params }: PageProps<"/s/[slug]"
             )}
           </section>
         )}
-      </div>
-      <p className="mx-auto mt-16 w-full max-w-3xl text-sm text-muted">
-        Kept awake by{" "}
-        <Link href="/" className="underline decoration-line underline-offset-4 hover:text-text">
-          ProjectSleeve
-        </Link>
-        .
-      </p>
-    </main>
+      </main>
+      <footer className="border-t border-line">
+        <p className="mx-auto w-full max-w-4xl px-4 py-6 text-sm text-muted sm:px-6">
+          Kept awake by{" "}
+          <Link
+            href="/"
+            className="text-text underline decoration-line underline-offset-4 hover:text-alive"
+          >
+            ProjectSleeve
+          </Link>
+        </p>
+      </footer>
+    </div>
   );
 }
