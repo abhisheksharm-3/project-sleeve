@@ -10,7 +10,7 @@ import { type NextRequest, NextResponse } from "next/server";
  * database refuses to hand over rows the caller does not own regardless of what happens here.
  */
 /** Everything else requires a session. "/" is the public landing page. */
-const PUBLIC_PREFIXES = ["/login", "/auth", "/status/", "/badge/", "/s/", "/h/"];
+const PUBLIC_PREFIXES = ["/login", "/auth", "/status/", "/badge/", "/s/", "/h/", "/api/v1/"];
 const PUBLIC_EXACT = ["/", "/opengraph-image", "/apple-icon", "/api/github/webhook"];
 
 export async function proxy(request: NextRequest) {

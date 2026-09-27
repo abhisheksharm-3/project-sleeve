@@ -30,6 +30,22 @@ Live at [projectsleeve.vercel.app](https://projectsleeve.vercel.app).
   90-day uptime, response times and outage history, plus a badge, an embeddable image
   and an iframe widget.
 
+## API
+
+Create a token under API tokens in the account menu, and send it as
+`Authorization: Bearer sleeve_…`. Tokens act as their owner and obey the same plan limits
+and URL checks as the forms.
+
+| Call                              | Does                                                   |
+| --------------------------------- | ------------------------------------------------------ |
+| `GET /api/v1/projects`            | Your projects and the backends in each                 |
+| `POST /api/v1/targets`            | Adds a `website` (`url`) or `heartbeat` (`label`, `interval_seconds`) to a `project_id` |
+| `DELETE /api/v1/targets/{id}`     | Removes one backend                                    |
+| `DELETE /api/v1/targets?url=…`    | Removes the website with that URL, for preview teardown |
+
+A heartbeat's `ping_url` is what your job calls when it runs; add `/fail` to report a
+failed run.
+
 ## How it works
 
 ```

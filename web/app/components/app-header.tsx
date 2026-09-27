@@ -65,6 +65,12 @@ export async function AppHeader({ session }: { session: Session }) {
                 >
                   Notifications
                 </Link>
+                <Link
+                  href="/api-tokens"
+                  className="block rounded-lg px-3 py-2 text-sm hover:bg-raised"
+                >
+                  API tokens
+                </Link>
                 <form action={signOut}>
                   <button
                     type="submit"
