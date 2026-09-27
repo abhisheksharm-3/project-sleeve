@@ -9,6 +9,7 @@ import { entitlements } from "@/lib/entitlements";
 import { track } from "@/lib/events";
 import { GitHubTokenMissing, githubToken, installationAccess, listRepos } from "@/lib/github";
 import { cadenceForSpace, parseSpaceId, resolveSpace } from "@/lib/huggingface";
+import { parseAtlasUri } from "@/lib/mongodb";
 import { probeTarget } from "@/lib/probe";
 import { scanRepo } from "@/lib/repo-scan";
 import { unseal } from "@/lib/sealed";
@@ -172,9 +173,10 @@ type NewTarget = {
 };
 
 const RENDER_CADENCE = 600;
+const KOYEB_CADENCE = 1_800;
 
 /** Platforms whose first request can outlast the check while the service wakes. */
-const COLD_START = ["render", "huggingface"];
+const COLD_START = ["render", "huggingface", "koyeb"];
 
 async function readSupabaseTarget(formData: FormData, back: string): Promise<NewTarget> {
   const url = supabaseTargetUrl(
@@ -268,6 +270,41 @@ async function readHuggingFaceTarget(
 }
 
 /**
+ * Atlas counts connections toward its 30-day pause, so the check connects and pings. The
+ * connection string is the secret; the target's URL keeps only the host, for display.
+ */
+async function readAtlasTarget(formData: FormData, back: string): Promise<NewTarget> {
+  const atlas = parseAtlasUri(String(formData.get("connection_string") ?? ""));
+  if (!atlas)
+    fail(
+      back,
+      "Paste the mongodb+srv:// connection string from Atlas, with the database user's username and password filled in.",
+    );
+  return {
+    platform: "mongodb",
+    url: `mongodb+srv://${atlas.host}`,
+    heartbeat_type: "db_connect",
+    secret: atlas.uri,
+    cadence: 86_400,
+  };
+}
+
+/** Koyeb's free instance sleeps after an hour without HTTP traffic; a visit resets it. */
+async function readKoyebTarget(formData: FormData, back: string): Promise<NewTarget> {
+  const check = await validateTargetUrl(String(formData.get("url") ?? ""));
+  if (!check.ok) fail(back, check.reason);
+  if (!new URL(check.url).hostname.endsWith(".koyeb.app"))
+    fail(back, "Use the service's public URL, which ends in .koyeb.app.");
+  return {
+    platform: "koyeb",
+    url: check.url,
+    heartbeat_type: "plain",
+    secret: null,
+    cadence: KOYEB_CADENCE,
+  };
+}
+
+/**
  * Appwrite ignores every read toward its inactivity check, so the heartbeat is a write
  * into the table the user created for us, with a key scoped to rows.write only.
  */
@@ -311,6 +348,10 @@ async function readTarget(
       return readAppwriteTarget(formData, back);
     case "huggingface":
       return readHuggingFaceTarget(formData, back, INTERVALS[0]);
+    case "mongodb":
+      return readAtlasTarget(formData, back);
+    case "koyeb":
+      return readKoyebTarget(formData, back);
     default:
       return readCustomTarget(formData, back, allowed);
   }
@@ -365,7 +406,7 @@ async function saveTarget(
     heartbeat_type: target.heartbeat_type,
   });
   revalidatePath(back);
-  redirect(`${back}?added=${data.id}&checked=${waking ? "waking" : probe.status}`);
+  redirect(`${back}?added=${data.id}&checked=${waking ? "waking" : (probe.status ?? "connected")}`);
 }
 
 export async function addTarget(formData: FormData) {

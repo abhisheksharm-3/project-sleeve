@@ -5,6 +5,7 @@
  * It builds the same request the engine sends. On failure it reads the platform's error
  * body, which is an error message and never the user's data, to say what to fix.
  */
+import { atlasPing, diagnoseAtlas } from "./mongodb.ts";
 
 export type Probeable = {
   platform: string;
@@ -104,7 +105,9 @@ export function diagnose(t: Probeable, status: number, body: ErrorBody): string 
 export async function probeTarget(
   t: Probeable,
   fetchFn: typeof fetch = fetch,
+  dbPing: (uri: string, timeoutMs: number) => Promise<void> = atlasPing,
 ): Promise<ProbeResult> {
+  if (t.heartbeat_type === "db_connect") return probeConnection(t, dbPing);
   const restore = restoreUrl(t);
   const started = performance.now();
   let res: Response;
@@ -148,6 +151,32 @@ export async function probeTarget(
     diagnosis,
     restoreUrl: paused ? restore : null,
   };
+}
+
+/** Atlas has no HTTP check: the probe connects exactly as the engine will. */
+async function probeConnection(
+  t: Probeable,
+  dbPing: (uri: string, timeoutMs: number) => Promise<void>,
+): Promise<ProbeResult> {
+  const started = performance.now();
+  try {
+    await dbPing(t.secret ?? "", TIMEOUT_MS);
+    return {
+      ok: true,
+      status: null,
+      latencyMs: Math.round(performance.now() - started),
+      diagnosis: null,
+      restoreUrl: null,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      status: null,
+      latencyMs: null,
+      diagnosis: diagnoseAtlas(e instanceof Error ? e.message : String(e)),
+      restoreUrl: null,
+    };
+  }
 }
 
 /** Only links to the platforms' own dashboards are ever rendered from a query string. */

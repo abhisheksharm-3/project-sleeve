@@ -136,6 +136,71 @@ function SupabaseForm({ projectId, minInterval, prefill }: FormProps) {
   );
 }
 
+function AtlasForm({ projectId, prefill }: FormProps) {
+  return (
+    <form action={addTarget}>
+      <Hidden projectId={projectId} kind="mongodb" />
+      <ol className="space-y-8">
+        <Step n={1} title="Make a database user for us">
+          <p className="text-sm leading-relaxed text-muted">
+            Atlas pauses a free cluster after 30 days without a connection, so every check opens one
+            and sends ping. In Database Access, add a user with a password and the built-in role{" "}
+            <span className="font-medium text-text">read</span> on a database called{" "}
+            <span className="font-mono text-[13px] text-text">sleeve</span>. It can see nothing
+            else.
+          </p>
+        </Step>
+        <Step n={2} title="Let our checks reach the cluster">
+          <p className="text-sm leading-relaxed text-muted">
+            In Network Access, allow connections from anywhere (0.0.0.0/0). Our checks do not come
+            from a fixed address, and the user from step 1 is what keeps the cluster safe.
+          </p>
+        </Step>
+        <Step n={3} title="Paste the connection string">
+          <Field
+            id="connection_string"
+            defaultValue={prefill.connection_string}
+            label="Connection string"
+            placeholder="mongodb+srv://sleeve:<password>@cluster0.abcde.mongodb.net/"
+          />
+          <p className="text-sm text-muted">
+            From Connect, Drivers, with the password filled in. Only you and our checker can read
+            it, and every screen shows just the cluster&apos;s name.
+          </p>
+        </Step>
+      </ol>
+      <div className="mt-8 sm:pl-11">
+        <button type="submit" className={BUTTON}>
+          Keep it awake
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function KoyebForm({ projectId, prefill }: FormProps) {
+  return (
+    <form action={addTarget} className="max-w-2xl space-y-4">
+      <Hidden projectId={projectId} kind="koyeb" />
+      <p className="text-sm text-muted">
+        Koyeb&apos;s free instance sleeps after an hour without traffic, so we visit it every 30
+        minutes.
+      </p>
+      <Field
+        id="koyeb_url"
+        defaultValue={prefill.url}
+        name="url"
+        type="url"
+        label="Service URL"
+        placeholder="https://my-app-myorg.koyeb.app/health"
+      />
+      <button type="submit" className={BUTTON}>
+        Keep it awake
+      </button>
+    </form>
+  );
+}
+
 function RenderForm({ projectId, prefill }: FormProps) {
   return (
     <form action={addTarget} className="max-w-2xl space-y-4">
@@ -329,6 +394,18 @@ export const PLATFORMS = [
     Form: AppwriteForm,
   },
   {
+    kind: "mongodb",
+    name: "MongoDB Atlas",
+    blurb: "Free clusters pause after 30 days without a connection.",
+    Form: AtlasForm,
+  },
+  {
+    kind: "koyeb",
+    name: "Koyeb",
+    blurb: "The free instance sleeps after an hour idle.",
+    Form: KoyebForm,
+  },
+  {
     kind: "custom",
     name: "Something else",
     blurb: "Any URL, or a route in your own app.",
@@ -344,13 +421,15 @@ export function AddTarget({ kind, ...props }: FormProps & { kind: string | undef
   const chosen = PLATFORMS.find((p) => p.kind === kind);
   if (!chosen) {
     return (
-      <div className="grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
         {PLATFORMS.map((p) => (
           <Link
             key={p.kind}
             href={`?add=${p.kind}#add`}
             scroll={false}
-            className="group flex gap-3 bg-ink p-5 transition-colors hover:bg-surface"
+            className={`group flex gap-3 bg-ink p-5 transition-colors hover:bg-surface ${
+              p.kind === "custom" ? "lg:col-span-2" : ""
+            }`}
           >
             <span
               aria-hidden

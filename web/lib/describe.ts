@@ -10,6 +10,8 @@ export const PLATFORM_NAMES: Record<string, string> = {
   huggingface: "Hugging Face",
   appwrite: "Appwrite",
   railway: "Railway",
+  mongodb: "MongoDB Atlas",
+  koyeb: "Koyeb",
   custom: "Website",
 };
 
@@ -35,6 +37,7 @@ export function methodText(t: Describable): string {
     return `reads one row from ${path.split("/").pop()}`;
   }
   if (t.platform === "appwrite") return "writes one heartbeat row";
+  if (t.platform === "mongodb") return "connects to your cluster and pings it";
   if (t.heartbeat_type === "db_query") return "calls your keepalive route";
   return "visits the page";
 }
@@ -47,6 +50,8 @@ export function targetTitle(t: Describable): { title: string; detail: string } {
     return { title: "Hugging Face Space", detail: h.replace(/\.hf\.space$/, "") };
   if (t.platform === "render") return { title: "Render service", detail: h };
   if (t.platform === "appwrite") return { title: "Appwrite project", detail: h.split(".")[0] };
+  if (t.platform === "mongodb") return { title: "MongoDB Atlas cluster", detail: h.split(".")[0] };
+  if (t.platform === "koyeb") return { title: "Koyeb service", detail: h };
   return { title: t.heartbeat_type === "db_query" ? "App backend" : "Website", detail: h };
 }
 

@@ -60,6 +60,22 @@ function suggestions(scan: RepoScan, keptHosts: Set<string>): Suggestion[] {
       }),
       covered: keptHosts.has(host(a.endpoint)),
     })),
+    ...(scan.mongodb ?? []).map((m) => ({
+      key: m.host,
+      title: "MongoDB Atlas cluster",
+      detail: m.host.split(".")[0],
+      source: m.source,
+      href: q({ add: "mongodb" }),
+      covered: keptHosts.has(m.host),
+    })),
+    ...(scan.koyeb ?? []).map((k) => ({
+      key: k.url,
+      title: "Koyeb service",
+      detail: host(k.url),
+      source: k.source,
+      href: q({ add: "koyeb", url: k.url }),
+      covered: keptHosts.has(host(k.url)),
+    })),
   ];
 }
 

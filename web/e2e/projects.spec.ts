@@ -60,3 +60,28 @@ test("the account menu signs out", async ({ signedIn: page }) => {
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/login/);
 });
+
+test("Atlas and Koyeb forms refuse what they cannot check", async ({ signedIn: page, user }) => {
+  const id = await seedProject(user.id, "e2e-platforms");
+
+  await page.goto(`/projects/${id}?add=mongodb#add`);
+  await page.getByLabel("Connection string").fill("mongodb+srv://sleeve:pw@evil.example.com/");
+  await page.getByRole("button", { name: "Keep it awake" }).click();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "mongodb+srv:// connection string" }),
+  ).toBeVisible();
+
+  await page.goto(`/projects/${id}?add=mongodb#add`);
+  await page
+    .getByLabel("Connection string")
+    .fill("mongodb+srv://sleeve:pw@no-such-cluster-e2e.abcde.mongodb.net/");
+  await page.getByRole("button", { name: "Keep it awake" }).click();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "No Atlas cluster answers" }),
+  ).toBeVisible();
+
+  await page.goto(`/projects/${id}?add=koyeb#add`);
+  await page.getByLabel("Service URL").fill("https://example.com/");
+  await page.getByRole("button", { name: "Keep it awake" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: ".koyeb.app" })).toBeVisible();
+});

@@ -35,7 +35,7 @@ const FREE_FALLBACK: Limits = {
   max_projects: 5,
   max_targets: 3,
   min_interval_seconds: 21_600,
-  platform_min_interval_seconds: { render: 600, huggingface: 600 },
+  platform_min_interval_seconds: { render: 600, huggingface: 600, koyeb: 1800 },
   heartbeat_types: ["plain", "db_query"],
   channels: ["email"],
 };

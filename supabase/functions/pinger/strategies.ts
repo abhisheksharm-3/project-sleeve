@@ -15,7 +15,7 @@ export type Job = {
   target_id: string;
   url: string;
   method: string;
-  heartbeat_type: "plain" | "db_query" | "db_write" | "synthetic";
+  heartbeat_type: "plain" | "db_query" | "db_write" | "db_connect" | "synthetic";
   secret: string | null;
   platform: string;
   /** The platform's own id for the target, e.g. an Appwrite project id. */
@@ -29,11 +29,57 @@ export type PingResult = {
   error: string | null;
 };
 
+/** Opens a database connection and runs one trivial command, or throws why it could not. */
+export type DbPing = (connectionString: string, timeoutMs: number) => Promise<void>;
+
 export type HeartbeatOptions = {
   fetchFn?: typeof fetch;
   now?: () => number;
   timeoutMs?: number;
+  dbPing?: DbPing;
 };
+
+/**
+ * Atlas counts connections, not HTTP, toward its 30-day pause, and has no HTTP API that
+ * counts. So the check connects with the user's low-privilege user and sends `ping`. The
+ * driver loads only when a MongoDB check runs.
+ */
+const mongoPing: DbPing = async (uri, timeoutMs) => {
+  const { MongoClient } = await import("npm:mongodb@6");
+  const client = new MongoClient(uri, {
+    serverSelectionTimeoutMS: timeoutMs,
+    connectTimeoutMS: timeoutMs,
+    appName: "projectsleeve",
+  });
+  try {
+    await client.connect();
+    await client.db("admin").command({ ping: 1 });
+  } finally {
+    await client.close().catch(() => {});
+  }
+};
+
+async function runDbConnect(
+  job: Job,
+  timeoutMs: number,
+  now: () => number,
+  ping: DbPing,
+): Promise<PingResult> {
+  if (!job.secret) {
+    return { ok: false, status_code: null, latency_ms: null, error: "missing connection string" };
+  }
+  const start = now();
+  try {
+    await ping(job.secret, timeoutMs);
+    return { ok: true, status_code: null, latency_ms: Math.round(now() - start), error: null };
+  } catch (e) {
+    const error = describeError(e, timeoutMs).replace(
+      /(mongodb(?:\+srv)?:\/\/)[^@\s]*@/g,
+      "$1***@",
+    );
+    return { ok: false, status_code: null, latency_ms: null, error };
+  }
+}
 
 /**
  * Must stay well under reap_stuck_jobs()'s 300s claim age, or a hung target would be
@@ -106,6 +152,9 @@ export async function runHeartbeat(job: Job, opts: HeartbeatOptions = {}): Promi
 
   if (job.heartbeat_type === "synthetic") {
     return { ok: false, status_code: null, latency_ms: null, error: "NotImplemented: synthetic" };
+  }
+  if (job.heartbeat_type === "db_connect") {
+    return runDbConnect(job, timeoutMs, now, opts.dbPing ?? mongoPing);
   }
 
   // Trust boundary: the URL is user-supplied. Anything but http(s) is never a live

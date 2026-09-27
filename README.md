@@ -1,8 +1,9 @@
 # ProjectSleeve
 
 Keep-alive for free-tier backends. Supabase pauses a free project after a week without
-database activity, Render sleeps after fifteen minutes, Appwrite pauses after a week and
-Hugging Face Spaces sleep on their own timer. ProjectSleeve checks each backend the way
+database activity, Render sleeps after fifteen minutes, Appwrite pauses after a week,
+MongoDB Atlas pauses a free cluster after 30 days without a connection, Koyeb sleeps after
+an hour, and Hugging Face Spaces sleep on their own timer. ProjectSleeve checks each backend the way
 its platform counts activity, on a schedule that does not switch itself off.
 
 Live at [projectsleeve.vercel.app](https://projectsleeve.vercel.app).
@@ -11,8 +12,10 @@ Live at [projectsleeve.vercel.app](https://projectsleeve.vercel.app).
 
 - **Keeps backends awake.** Supabase checks call a `keepalive()` function inside Postgres,
   because a page visit is not database activity. Appwrite checks write a heartbeat row.
-  Render, Hugging Face and plain URLs are visited on a cadence shorter than their sleep
-  timer.
+  Atlas checks open a real connection and send `ping`. Render, Koyeb, Hugging Face and
+  plain URLs are visited on a cadence shorter than their sleep timer. Neon and Fly.io are
+  left out on purpose: both scale to zero by design and wake on the next request, and
+  keeping them awake only spends the user's quota or money.
 - **Imports from GitHub.** Sign in with GitHub, pick repositories, and each becomes a
   project. A scan reads `render.yaml`, `.env` examples and the README for backends, and
   finds keep-alive GitHub Actions that GitHub has switched off after 60 quiet days.

@@ -65,3 +65,15 @@ test("looksLikeKeepAlive wants a schedule and a ping-shaped job", () => {
     false,
   );
 });
+
+test("extractFindings: Atlas hosts without their credentials, and Koyeb services", () => {
+  const f = extractFindings({
+    ".env.example":
+      "MONGODB_URI=mongodb+srv://admin:hunter2@cluster0.ab1cd.mongodb.net/app\nPLACEHOLDER=mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net\nAPI=https://quickgist-api-abhi.koyeb.app/health",
+  });
+  assert.deepEqual(f.mongodb, [{ host: "cluster0.ab1cd.mongodb.net", source: ".env.example" }]);
+  assert.equal(JSON.stringify(f).includes("hunter2"), false);
+  assert.deepEqual(f.koyeb, [
+    { url: "https://quickgist-api-abhi.koyeb.app", source: ".env.example" },
+  ]);
+});

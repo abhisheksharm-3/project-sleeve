@@ -194,7 +194,9 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
           >
             {checked === "waking"
               ? "Saved. It took a while to answer, which usually means it was asleep and is waking up now. The next check will confirm."
-              : `Saved, and the first check passed (${checked}). It is being kept awake from now on.`}
+              : checked === "connected"
+                ? "Saved, and the first connection worked. It is being kept awake from now on."
+                : `Saved, and the first check passed (${checked}). It is being kept awake from now on.`}
           </p>
         )}
         {queued && (

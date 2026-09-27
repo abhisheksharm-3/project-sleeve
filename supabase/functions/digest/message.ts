@@ -22,6 +22,8 @@ const KIND: Record<string, string> = {
   render: "Render service",
   huggingface: "Hugging Face Space",
   appwrite: "Appwrite project",
+  mongodb: "MongoDB Atlas cluster",
+  koyeb: "Koyeb service",
   custom: "Website",
 };
 const DAY_S = 86_400;

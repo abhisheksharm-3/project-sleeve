@@ -316,3 +316,44 @@ Deno.test("runHeartbeat: db_write without a project ref fails before any request
   assertEquals(r.ok, false);
   assertEquals(called, false);
 });
+
+const mongoJob: Job = {
+  job_id: "j",
+  target_id: "t",
+  url: "mongodb+srv://cluster0.abcde.mongodb.net",
+  method: "GET",
+  heartbeat_type: "db_connect",
+  secret: "mongodb+srv://sleeve:hunter2@cluster0.abcde.mongodb.net/?appName=x",
+  platform: "mongodb",
+  platform_ref: null,
+};
+
+Deno.test("db_connect: a successful ping is ok, with latency and no status line", async () => {
+  let seen = "";
+  let t = 0;
+  const r = await runHeartbeat(mongoJob, {
+    dbPing: (uri) => {
+      seen = uri;
+      return Promise.resolve();
+    },
+    now: () => (t += 40),
+  });
+  assertEquals(seen, mongoJob.secret);
+  assertEquals(r, { ok: true, status_code: null, latency_ms: 40, error: null });
+});
+
+Deno.test("db_connect: failures never log the password", async () => {
+  const r = await runHeartbeat(mongoJob, {
+    dbPing: () => Promise.reject(new Error(`auth failed for ${mongoJob.secret}`)),
+  });
+  assertEquals(r.ok, false);
+  assertEquals(r.error?.includes("hunter2"), false);
+  assertEquals(r.error?.includes("mongodb+srv://***@cluster0"), true);
+});
+
+Deno.test("db_connect: no connection string, no attempt", async () => {
+  const r = await runHeartbeat({ ...mongoJob, secret: null }, {
+    dbPing: () => Promise.reject(new Error("should not run")),
+  });
+  assertEquals(r.error, "missing connection string");
+});

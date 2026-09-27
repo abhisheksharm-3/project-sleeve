@@ -5,11 +5,17 @@ export type Findings = {
   appwrite: { endpoint: string; projectId: string | null; source: string }[];
   render: { url: string; source: string }[];
   huggingface: { id: string; source: string }[];
+  /** Absent from scans saved before Atlas and Koyeb were supported. */
+  mongodb?: { host: string; source: string }[];
+  koyeb?: { url: string; source: string }[];
 };
 
 const SUPABASE = /https:\/\/([a-z0-9]{20})\.supabase\.co/g;
 const APPWRITE_ENDPOINT = /https:\/\/(?:[a-z0-9-]+\.)?cloud\.appwrite\.io\/v1/;
 const APPWRITE_PROJECT = /APPWRITE_PROJECT(?:_ID)?\s*[=:]\s*["']?([A-Za-z0-9][A-Za-z0-9._-]{9,35})/;
+/** Only the cluster host is kept; any credentials in the string are dropped here. */
+const ATLAS = /mongodb\+srv:\/\/(?:[^@\s"'/]+@)?([a-z0-9-]+(?:\.[a-z0-9-]+)*\.mongodb\.net)/gi;
+const KOYEB = /https:\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)*\.koyeb\.app)/g;
 const HF_SPACE = /https:\/\/huggingface\.co\/spaces\/([A-Za-z0-9][\w.-]*\/[A-Za-z0-9][\w.-]*)/g;
 
 /** A real project ref, not a documentation placeholder like xxxxxxxxxxxxxxxxxxxx. */
@@ -33,7 +39,14 @@ function renderServices(yaml: string): string[] {
 }
 
 export function extractFindings(files: Record<string, string>): Findings {
-  const f: Findings = { supabase: [], appwrite: [], render: [], huggingface: [] };
+  const f: Findings = {
+    supabase: [],
+    appwrite: [],
+    render: [],
+    huggingface: [],
+    mongodb: [],
+    koyeb: [],
+  };
   const seen = new Set<string>();
   const once = (key: string) => !seen.has(key) && seen.add(key);
 
@@ -48,6 +61,14 @@ export function extractFindings(files: Record<string, string>): Findings {
     }
     for (const m of text.matchAll(HF_SPACE)) {
       if (once(`hf:${m[1]}`)) f.huggingface.push({ id: m[1], source });
+    }
+    for (const m of text.matchAll(ATLAS)) {
+      const host = m[1].toLowerCase();
+      if (!/x{4,}|<|example/.test(host) && once(`mongo:${host}`)) f.mongodb?.push({ host, source });
+    }
+    for (const m of text.matchAll(KOYEB)) {
+      const url = `https://${m[1]}`;
+      if (once(url)) f.koyeb?.push({ url, source });
     }
     if (source === "render.yaml") {
       for (const name of renderServices(text)) {
