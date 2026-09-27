@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { TargetRow } from "@/app/components/target-row";
 import { removeTarget, testTarget } from "@/app/projects/actions";
 import { entitlements } from "@/lib/entitlements";
-import { ago, every } from "@/lib/format";
+import { loadHealth } from "@/lib/load-health";
 import { requireUser } from "@/lib/session";
 import { TargetForms } from "./target-forms";
 
@@ -14,13 +15,6 @@ type Target = {
   heartbeat_type: string;
   interval_seconds: number;
   secret: string | null;
-};
-type Ping = {
-  target_id: string;
-  ok: boolean;
-  status_code: number | null;
-  error: string | null;
-  ran_at: string;
 };
 
 /** The route a user drops into their own app so a db_query ping runs a real query. */
@@ -69,20 +63,11 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
 
   const targets = (project.targets ?? []) as Target[];
   const limits = await entitlements(user.id);
-  const latest = new Map<string, Ping>();
-  if (targets.length) {
-    const { data: pings } = await supabase
-      .from("ping_log")
-      .select("target_id, ok, status_code, error, ran_at")
-      .in(
-        "target_id",
-        targets.map((t) => t.id),
-      )
-      .order("ran_at", { ascending: false })
-      .limit(targets.length * 10);
-    for (const p of (pings ?? []) as Ping[])
-      if (!latest.has(p.target_id)) latest.set(p.target_id, p);
-  }
+  const { health, days } = await loadHealth(
+    supabase,
+    targets.map((t) => t.id),
+  );
+  const now = Date.now();
   const newTarget = targets.find((t) => t.id === added);
 
   return (
@@ -127,43 +112,28 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
           </p>
         ) : (
           <ul className="mt-4 border border-line bg-surface">
-            {targets.map((t) => {
-              const ping = latest.get(t.id);
-              const state = !ping ? "idle" : ping.ok ? "alive" : "dead";
-              const dot =
-                state === "alive" ? "bg-alive pulse" : state === "dead" ? "bg-dead" : "bg-muted";
-              return (
-                <li
-                  key={t.id}
-                  className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line/60 px-4 py-3 last:border-b-0"
-                >
-                  <span className={`size-2 shrink-0 rounded-full ${dot}`} aria-hidden />
-                  <span className="min-w-0 flex-1 truncate font-mono text-sm">{t.url}</span>
-                  <span className="shrink-0 font-mono text-xs text-muted">
-                    {t.platform} · {t.heartbeat_type} · {every(t.interval_seconds)}
-                  </span>
-                  <span
-                    className={`w-36 shrink-0 text-right font-mono text-xs ${state === "dead" ? "text-dead" : "text-muted"}`}
-                  >
-                    {ping
-                      ? `${ping.status_code ?? ping.error ?? "err"} · ${ago(ping.ran_at)}`
-                      : "never pinged"}
-                  </span>
-                  <form action={testTarget}>
-                    <input type="hidden" name="target_id" value={t.id} />
-                    <button type="submit" className="font-mono text-xs text-accent hover:underline">
-                      test now
-                    </button>
-                  </form>
-                  <form action={removeTarget}>
-                    <input type="hidden" name="target_id" value={t.id} />
-                    <button type="submit" className="font-mono text-xs text-muted hover:text-dead">
-                      remove
-                    </button>
-                  </form>
-                </li>
-              );
-            })}
+            {targets.map((t) => (
+              <TargetRow
+                key={t.id}
+                target={t}
+                health={health.get(t.id)}
+                days={days.get(t.id) ?? []}
+                now={now}
+              >
+                <form action={testTarget}>
+                  <input type="hidden" name="target_id" value={t.id} />
+                  <button type="submit" className="font-mono text-xs text-accent hover:underline">
+                    test now
+                  </button>
+                </form>
+                <form action={removeTarget}>
+                  <input type="hidden" name="target_id" value={t.id} />
+                  <button type="submit" className="font-mono text-xs text-muted hover:text-dead">
+                    remove
+                  </button>
+                </form>
+              </TargetRow>
+            ))}
           </ul>
         )}
       </section>

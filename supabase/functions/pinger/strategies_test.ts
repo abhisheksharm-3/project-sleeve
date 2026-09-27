@@ -1,5 +1,11 @@
 import { assert, assertEquals } from "@std/assert";
-import { DEFAULT_TIMEOUT_MS, deadlineFor, detectPause, type Job, runHeartbeat } from "./strategies.ts";
+import {
+  deadlineFor,
+  DEFAULT_TIMEOUT_MS,
+  detectPause,
+  type Job,
+  runHeartbeat,
+} from "./strategies.ts";
 
 const baseJob: Job = {
   job_id: "j1",
@@ -250,11 +256,12 @@ Deno.test("deadlineFor: cold-start platforms get longer than the default", () =>
 
 Deno.test("runHeartbeat: uses the platform deadline when none is given", async () => {
   let aborted = false;
-  const fetchFn = ((_u: string | URL | Request, init: RequestInit) =>
-    new Promise<Response>((resolve) => {
-      init.signal?.addEventListener("abort", () => (aborted = true));
-      setTimeout(() => resolve(new Response("", { status: 200 })), 20_000);
-    })) as unknown as typeof fetch;
+  const fetchFn =
+    ((_u: string | URL | Request, init: RequestInit) =>
+      new Promise<Response>((resolve) => {
+        init.signal?.addEventListener("abort", () => (aborted = true));
+        setTimeout(() => resolve(new Response("", { status: 200 })), 20_000);
+      })) as unknown as typeof fetch;
   const started = performance.now();
   const r = await runHeartbeat({ ...baseJob, platform: "huggingface" }, { fetchFn });
   assertEquals(aborted, false, "a 20s cold start must not trip a 45s deadline");
@@ -283,7 +290,11 @@ Deno.test("runHeartbeat: an appwrite db_write upserts one timestamp row with App
   assertEquals(seen.headers?.get("x-appwrite-project"), "proj123");
   assertEquals(seen.headers?.get("x-appwrite-key"), "standard_rowswrite");
   assertEquals(seen.headers?.get("content-type"), "application/json");
-  assertEquals(seen.headers?.get("authorization"), null, "the Appwrite key must not travel as a bearer token");
+  assertEquals(
+    seen.headers?.get("authorization"),
+    null,
+    "the Appwrite key must not travel as a bearer token",
+  );
   const body = JSON.parse(seen.body ?? "{}");
   assertEquals(Object.keys(body.data), ["beat"], "we write a timestamp and nothing else");
   assert(!Number.isNaN(Date.parse(body.data.beat)));
@@ -295,7 +306,13 @@ Deno.test("runHeartbeat: db_write without a project ref fails before any request
     called = true;
     return Promise.resolve(new Response("", { status: 200 }));
   }) as unknown as typeof fetch;
-  const r = await runHeartbeat({ ...baseJob, platform: "appwrite", heartbeat_type: "db_write", secret: "k", platform_ref: null }, { fetchFn });
+  const r = await runHeartbeat({
+    ...baseJob,
+    platform: "appwrite",
+    heartbeat_type: "db_write",
+    secret: "k",
+    platform_ref: null,
+  }, { fetchFn });
   assertEquals(r.ok, false);
   assertEquals(called, false);
 });

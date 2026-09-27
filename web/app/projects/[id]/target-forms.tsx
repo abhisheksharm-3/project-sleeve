@@ -1,6 +1,6 @@
 /** The add-target forms, one per platform, each asking only for what that platform needs. */
 import { addTarget } from "@/app/projects/actions";
-import { APPWRITE_COLUMN, APPWRITE_DATABASE_ID, APPWRITE_TABLE_ID } from "@/lib/appwrite";
+import { APPWRITE_COLUMN, APPWRITE_TABLE_ID } from "@/lib/appwrite";
 import { every } from "@/lib/format";
 import { KEEPALIVE_SQL } from "@/lib/target-url";
 
@@ -153,13 +153,13 @@ export function TargetForms({
         </p>
         <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted">
           <li>
-            Databases → create a database with id{" "}
-            <span className="font-mono text-text">{APPWRITE_DATABASE_ID}</span>.
+            Databases → open your existing database. The free plan allows one, so the table goes
+            there.
           </li>
           <li>
-            In it, create a table with id{" "}
-            <span className="font-mono text-text">{APPWRITE_TABLE_ID}</span>, and add a string
-            column <span className="font-mono text-text">{APPWRITE_COLUMN}</span> of size 40.
+            Create a table with id <span className="font-mono text-text">{APPWRITE_TABLE_ID}</span>,
+            and add a string column <span className="font-mono text-text">{APPWRITE_COLUMN}</span>{" "}
+            of size 40. We only ever write one row to it.
           </li>
           <li>
             Overview → API keys → create a key with{" "}
@@ -167,7 +167,7 @@ export function TargetForms({
             <span className="font-mono text-text">rows.write</span> scope. It cannot read your data
             or change your schema.
           </li>
-          <li>Paste the endpoint, project id and key below.</li>
+          <li>Paste the endpoint, project id, database id and key below.</li>
         </ol>
         <p className="border border-warn/40 bg-warn/5 px-3 py-2 text-xs leading-relaxed text-warn">
           Appwrite says only Console activity keeps a project awake. Whether a write counts is not
@@ -175,6 +175,11 @@ export function TargetForms({
         </p>
         <Field id="endpoint" label="api endpoint" placeholder="https://fra.cloud.appwrite.io/v1" />
         <Field id="appwrite_project" label="project id" placeholder="6523f1a2b3c4d5e6f7a8" />
+        <Field
+          id="appwrite_database"
+          label="database id"
+          placeholder="the id shown on your database's page"
+        />
         <Field id="appwrite_key" label="api key — rows.write scope only" placeholder="standard_…" />
         <button type="submit" className={BUTTON}>
           Add Appwrite target

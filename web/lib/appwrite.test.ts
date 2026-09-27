@@ -2,13 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { appwriteRowUrl, isAppwriteId } from "./appwrite.ts";
 
-test("appwriteRowUrl builds the heartbeat row URL for Cloud endpoints", () => {
-  const row = "/v1/tablesdb/sleeve/tables/heartbeats/rows/sleeve";
+test("appwriteRowUrl builds the heartbeat row URL inside the user's own database", () => {
+  const row = "/v1/tablesdb/main-db/tables/heartbeats/rows/sleeve";
   assert.equal(
-    appwriteRowUrl("https://fra.cloud.appwrite.io/v1"),
+    appwriteRowUrl("https://fra.cloud.appwrite.io/v1", "main-db"),
     `https://fra.cloud.appwrite.io${row}`,
   );
-  assert.equal(appwriteRowUrl("https://cloud.appwrite.io/v1"), `https://cloud.appwrite.io${row}`);
+  assert.equal(
+    appwriteRowUrl("https://cloud.appwrite.io/v1", " main-db "),
+    `https://cloud.appwrite.io${row}`,
+  );
 });
 
 test("appwriteRowUrl refuses anything that is not Appwrite Cloud over https", () => {
@@ -19,8 +22,13 @@ test("appwriteRowUrl refuses anything that is not Appwrite Cloud over https", ()
     "https://appwrite.mycompany.com/v1",
     "nope",
   ]) {
-    assert.equal(appwriteRowUrl(bad), null, bad);
+    assert.equal(appwriteRowUrl(bad, "main-db"), null, bad);
   }
+});
+
+test("appwriteRowUrl refuses a malformed database id, so it cannot rewrite the path", () => {
+  assert.equal(appwriteRowUrl("https://fra.cloud.appwrite.io/v1", "../../users"), null);
+  assert.equal(appwriteRowUrl("https://fra.cloud.appwrite.io/v1", ""), null);
 });
 
 test("isAppwriteId accepts project ids and refuses junk", () => {

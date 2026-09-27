@@ -416,3 +416,7 @@ enabled = true
 # pg_cron authenticates with the x-sleeve-cron shared secret the function checks itself.
 # Leaving JWT verification on would have the gateway reject that call before it arrives.
 verify_jwt = false
+
+[functions.alerter]
+# Triggered by pg_cron with the same x-sleeve-cron shared secret as the pinger.
+verify_jwt = false

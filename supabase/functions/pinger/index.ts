@@ -1,24 +1,13 @@
+/**
+ * One engine cycle per call. Deployed with verify_jwt off, so the cron shared secret is the
+ * only thing between the internet and the job queue; pg_cron sends it as a header.
+ */
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { isCronRequest } from "../_shared/cron-auth.ts";
 import { runCycle } from "./engine.ts";
 
-/** Compare without leaking the secret's contents through response timing. */
-function secretMatches(given: string | null, expected: string): boolean {
-  if (given === null) return false;
-  const a = new TextEncoder().encode(given);
-  const b = new TextEncoder().encode(expected);
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
-  return diff === 0;
-}
-
 Deno.serve(async (req) => {
-  // This function is deployed with verify_jwt disabled, so the shared secret is the only
-  // thing standing between the internet and the job queue. pg_cron sends it as a header.
-  const expected = Deno.env.get("SLEEVE_CRON_SECRET");
-  if (!expected || !secretMatches(req.headers.get("x-sleeve-cron"), expected)) {
-    return new Response("forbidden", { status: 403 });
-  }
+  if (!isCronRequest(req)) return new Response("forbidden", { status: 403 });
 
   const db = createClient(
     Deno.env.get("SUPABASE_URL")!,

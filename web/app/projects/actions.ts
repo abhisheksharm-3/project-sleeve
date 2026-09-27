@@ -100,6 +100,7 @@ type NewTarget = {
   cadence?: number;
   method?: string;
   platform_ref?: string;
+  pause_window_seconds?: number;
 };
 
 const RENDER_CADENCE = 600;
@@ -169,6 +170,7 @@ async function readHuggingFaceTarget(
     heartbeat_type: "plain",
     secret: null,
     cadence: cadenceForSpace(space.sleepSeconds, fallback),
+    pause_window_seconds: space.sleepSeconds ?? undefined,
   };
 }
 
@@ -177,8 +179,15 @@ async function readHuggingFaceTarget(
  * into the table the user created for us, with a key scoped to rows.write only.
  */
 async function readAppwriteTarget(formData: FormData, back: string): Promise<NewTarget> {
-  const url = appwriteRowUrl(String(formData.get("endpoint") ?? ""));
-  if (!url) fail(back, "Use your Appwrite Cloud endpoint, e.g. https://fra.cloud.appwrite.io/v1.");
+  const url = appwriteRowUrl(
+    String(formData.get("endpoint") ?? ""),
+    String(formData.get("appwrite_database") ?? ""),
+  );
+  if (!url)
+    fail(
+      back,
+      "Use your Appwrite Cloud endpoint (e.g. https://fra.cloud.appwrite.io/v1) and your database id.",
+    );
   const projectId = String(formData.get("appwrite_project") ?? "").trim();
   if (!isAppwriteId(projectId)) fail(back, "That does not look like an Appwrite project id.");
   const key = String(formData.get("appwrite_key") ?? "").trim();
