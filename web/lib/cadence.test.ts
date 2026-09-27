@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { cadenceFloor, clampCadence } from "./cadence.ts";
 
-const FREE = { min_interval_seconds: 21600, platform_min_interval_seconds: { render: 600, huggingface: 600 } };
+const FREE = {
+  min_interval_seconds: 21600,
+  platform_min_interval_seconds: { render: 600, huggingface: 600 },
+};
 
 test("a platform floor replaces the plan floor", () => {
   assert.equal(cadenceFloor(FREE, "render"), 600);
