@@ -6,8 +6,10 @@ import { redirect } from "next/navigation";
 import { appwriteRowUrl, isAppwriteId } from "@/lib/appwrite";
 import { entitlements } from "@/lib/entitlements";
 import { track } from "@/lib/events";
-import { GitHubTokenMissing, listRepos } from "@/lib/github";
+import { GitHubTokenMissing, githubToken, listRepos } from "@/lib/github";
 import { cadenceForSpace, parseSpaceId, resolveSpace } from "@/lib/huggingface";
+import { probeTarget } from "@/lib/probe";
+import { scanRepo } from "@/lib/repo-scan";
 import { requireUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isPublicSupabaseKey } from "@/lib/supabase-key";
@@ -55,17 +57,55 @@ export async function importRepos(formData: FormData) {
   if (room <= 0)
     fail("/import", `The ${limits.planName} plan allows ${limits.limits.max_projects} projects.`);
 
-  const { error } = await createAdminClient()
+  const { data: saved, error } = await createAdminClient()
     .from("projects")
     .upsert(
       repos.slice(0, room).map((r) => ({ ...r, user_id: user.id })),
       { onConflict: "user_id,github_id" },
-    );
+    )
+    .select("id, name");
   if (error) fail("/import", "Could not save those projects.");
+  await scanProjects(user.id, saved ?? []);
 
   await track(user.id, "repo_imported", { count: Math.min(repos.length, room) });
   revalidatePath("/dashboard");
   redirect("/dashboard");
+}
+
+/**
+ * Best effort: a scan that fails leaves the project without findings rather than failing
+ * the import, and the project page offers to scan again.
+ */
+async function scanProjects(userId: string, projects: { id: string; name: string }[]) {
+  const token = await githubToken(userId).catch(() => null);
+  if (!token) return;
+  const admin = createAdminClient();
+  await Promise.all(
+    projects.map(async (p) => {
+      const scan = await scanRepo(p.name, token).catch(() => null);
+      if (scan)
+        await admin
+          .from("projects")
+          .update({ scan, scanned_at: new Date().toISOString() })
+          .eq("id", p.id);
+    }),
+  );
+}
+
+export async function rescanProject(formData: FormData) {
+  const { supabase, user } = await requireUser();
+  const id = String(formData.get("project_id") ?? "");
+  const { data: project } = await supabase
+    .from("projects")
+    .select("id, name, github_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!project) fail("/dashboard", "That project is not yours.");
+  if (!project.github_id)
+    fail(`/projects/${id}`, "Only projects imported from GitHub can be scanned.");
+  await scanProjects(user.id, [project]);
+  revalidatePath(`/projects/${id}`);
+  redirect(`/projects/${id}?scanned=1#found`);
 }
 
 export async function createProject(formData: FormData) {
@@ -104,6 +144,9 @@ type NewTarget = {
 };
 
 const RENDER_CADENCE = 600;
+
+/** Platforms whose first request can outlast the check while the service wakes. */
+const COLD_START = ["render", "huggingface"];
 
 async function readSupabaseTarget(formData: FormData, back: string): Promise<NewTarget> {
   const url = supabaseTargetUrl(
@@ -243,19 +286,44 @@ export async function addTarget(formData: FormData) {
     target.platform,
   );
 
-  const { data, error } = await createAdminClient()
+  const probe = await probeTarget({
+    platform: target.platform,
+    url: target.url,
+    heartbeat_type: target.heartbeat_type,
+    method: target.method ?? "GET",
+    secret: target.secret,
+    platform_ref: target.platform_ref ?? null,
+  });
+  const waking = !probe.ok && probe.status === null && COLD_START.includes(target.platform);
+  if (!probe.ok && !waking) {
+    const restore = probe.restoreUrl ? `&restore=${encodeURIComponent(probe.restoreUrl)}` : "";
+    redirect(
+      `${back}?add=${String(formData.get("kind") ?? "")}&error=${encodeURIComponent(probe.diagnosis ?? "The check failed.")}${restore}#add`,
+    );
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from("targets")
     .insert({ ...target, project_id: projectId, interval_seconds: interval })
     .select("id")
     .single();
   if (error || !data) fail(back, "Could not save the target.");
+  if (probe.ok) {
+    await admin.from("ping_log").insert({
+      target_id: data.id,
+      ok: true,
+      status_code: probe.status,
+      latency_ms: probe.latencyMs,
+    });
+  }
 
   await track(user.id, "target_added", {
     platform: target.platform,
     heartbeat_type: target.heartbeat_type,
   });
   revalidatePath(back);
-  redirect(`${back}?added=${data.id}`);
+  redirect(`${back}?added=${data.id}&checked=${waking ? "waking" : probe.status}`);
 }
 
 async function ownedTarget(targetId: string) {

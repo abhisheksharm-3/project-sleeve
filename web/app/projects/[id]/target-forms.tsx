@@ -59,7 +59,7 @@ function IntervalField({ id, min }: { id: string; min: number }) {
   );
 }
 
-function SupabaseForm({ projectId, minInterval }: FormProps) {
+function SupabaseForm({ projectId, minInterval, prefill }: FormProps) {
   return (
     <form action={addTarget} className="max-w-2xl space-y-4">
       <Hidden projectId={projectId} kind="supabase" />
@@ -73,6 +73,7 @@ function SupabaseForm({ projectId, minInterval }: FormProps) {
       </pre>
       <Field
         id="project_url"
+        defaultValue={prefill.project_url}
         label="Project URL"
         placeholder="https://abcdefghijklmnopqrst.supabase.co"
       />
@@ -101,7 +102,7 @@ function SupabaseForm({ projectId, minInterval }: FormProps) {
   );
 }
 
-function RenderForm({ projectId }: FormProps) {
+function RenderForm({ projectId, prefill }: FormProps) {
   return (
     <form action={addTarget} className="max-w-2xl space-y-4">
       <Hidden projectId={projectId} kind="render" />
@@ -115,6 +116,7 @@ function RenderForm({ projectId }: FormProps) {
       </p>
       <Field
         id="render_url"
+        defaultValue={prefill.url}
         name="url"
         type="url"
         label="Service URL"
@@ -127,7 +129,7 @@ function RenderForm({ projectId }: FormProps) {
   );
 }
 
-function HuggingFaceForm({ projectId }: FormProps) {
+function HuggingFaceForm({ projectId, prefill }: FormProps) {
   return (
     <form action={addTarget} className="max-w-2xl space-y-4">
       <Hidden projectId={projectId} kind="huggingface" />
@@ -135,7 +137,12 @@ function HuggingFaceForm({ projectId }: FormProps) {
         A visit wakes a sleeping Space and resets its timer. We read the Space&apos;s own sleep
         timeout and ping at half of it, so a single missed ping never lets it sleep.
       </p>
-      <Field id="space" label="Space name or URL" placeholder="owner/space-name" />
+      <Field
+        id="space"
+        defaultValue={prefill.space}
+        label="Space name or URL"
+        placeholder="owner/space-name"
+      />
       <button type="submit" className={BUTTON}>
         Add Space
       </button>
@@ -143,7 +150,7 @@ function HuggingFaceForm({ projectId }: FormProps) {
   );
 }
 
-function AppwriteForm({ projectId }: FormProps) {
+function AppwriteForm({ projectId, prefill }: FormProps) {
   return (
     <form action={addTarget} className="max-w-2xl space-y-4">
       <Hidden projectId={projectId} kind="appwrite" />
@@ -174,8 +181,18 @@ function AppwriteForm({ projectId }: FormProps) {
         Appwrite says only Console activity keeps a project awake. Whether a write counts is not yet
         proven. Every write is logged here, so you will see it the day one fails.
       </p>
-      <Field id="endpoint" label="API endpoint" placeholder="https://fra.cloud.appwrite.io/v1" />
-      <Field id="appwrite_project" label="Project ID" placeholder="6523f1a2b3c4d5e6f7a8" />
+      <Field
+        id="endpoint"
+        defaultValue={prefill.endpoint}
+        label="API endpoint"
+        placeholder="https://fra.cloud.appwrite.io/v1"
+      />
+      <Field
+        id="appwrite_project"
+        defaultValue={prefill.appwrite_project}
+        label="Project ID"
+        placeholder="6523f1a2b3c4d5e6f7a8"
+      />
       <Field
         id="appwrite_database"
         label="Database ID"
@@ -234,7 +251,15 @@ const HEARTBEAT_CHOICE: Record<string, string> = {
   plain: "Just visit the URL",
 };
 
-type FormProps = { projectId: string; minInterval: number; heartbeatTypes: string[] };
+/** Values found by the repository scan, keyed by form field name. */
+export type Prefill = Record<string, string | undefined>;
+
+type FormProps = {
+  projectId: string;
+  minInterval: number;
+  heartbeatTypes: string[];
+  prefill: Prefill;
+};
 
 /** The choices, in the order people most often need them. */
 export const PLATFORMS = [

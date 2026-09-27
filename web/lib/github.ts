@@ -31,13 +31,19 @@ const MAX_PAGES = 5;
  *
  * ponytail: stops at 500 repos (5 pages of 100); page further if someone owns more.
  */
-export async function listRepos(userId: string): Promise<Repo[]> {
+/** The user's stored GitHub token, or GitHubTokenMissing when sign-in has to run again. */
+export async function githubToken(userId: string): Promise<string> {
   const { data } = await createAdminClient()
     .from("github_credentials")
     .select("access_token")
     .eq("user_id", userId)
     .maybeSingle();
   if (!data?.access_token) throw new GitHubTokenMissing();
+  return data.access_token;
+}
+
+export async function listRepos(userId: string): Promise<Repo[]> {
+  const token = await githubToken(userId);
 
   const repos: Repo[] = [];
   for (let page = 1; page <= MAX_PAGES; page++) {
@@ -45,7 +51,7 @@ export async function listRepos(userId: string): Promise<Repo[]> {
       `https://api.github.com/user/repos?per_page=100&page=${page}&sort=pushed&affiliation=owner&visibility=public`,
       {
         headers: {
-          authorization: `Bearer ${data.access_token}`,
+          authorization: `Bearer ${token}`,
           accept: "application/vnd.github+json",
           "x-github-api-version": "2022-11-28",
         },

@@ -4,6 +4,7 @@ import { caveat, methodText, statusOf, targetTitle } from "@/lib/describe";
 import { every } from "@/lib/format";
 import type { Health } from "@/lib/health";
 import type { Day } from "@/lib/load-health";
+import { restoreUrl } from "@/lib/probe";
 import { NightStrip } from "./night-strip";
 import { Window } from "./window";
 
@@ -13,6 +14,8 @@ export type CardTarget = {
   platform: string;
   heartbeat_type: string;
   interval_seconds: number;
+  platform_ref?: string | null;
+  method?: string;
 };
 
 const SENTENCE_TONE = {
@@ -43,6 +46,14 @@ export function TargetCard({
   const { title, detail } = targetTitle(target);
   const status = statusOf(target, health, now);
   const warning = caveat(target);
+  const restore = restoreUrl({
+    platform: target.platform,
+    url: target.url,
+    heartbeat_type: target.heartbeat_type,
+    method: target.method ?? "GET",
+    secret: null,
+    platform_ref: target.platform_ref ?? null,
+  });
   return (
     <li className="flex gap-5 rounded-2xl border border-line bg-surface p-6">
       <div className="pt-1">
@@ -71,6 +82,14 @@ export function TargetCard({
           </span>
         </div>
         {warning && <p className="mt-3 text-sm text-warn">{warning}</p>}
+        {status.state === "paused" && restore && (
+          <a
+            href={restore}
+            className="mt-3 inline-block text-sm font-semibold text-dead underline underline-offset-4"
+          >
+            Open it on the platform to restore it
+          </a>
+        )}
       </div>
     </li>
   );

@@ -7,8 +7,11 @@ import { removeTarget, testTarget } from "@/app/projects/actions";
 import { statusOf } from "@/lib/describe";
 import { entitlements } from "@/lib/entitlements";
 import { loadHealth } from "@/lib/load-health";
+import { isRestoreLink } from "@/lib/probe";
+import type { RepoScan } from "@/lib/repo-scan";
 import { requireUser } from "@/lib/session";
-import { AddTarget } from "./target-forms";
+import { FoundPanel } from "./found-panel";
+import { AddTarget, type Prefill } from "./target-forms";
 
 /** One project: the backends kept awake, and a two-step way to add another. */
 type Target = {
@@ -18,6 +21,8 @@ type Target = {
   heartbeat_type: string;
   interval_seconds: number;
   secret: string | null;
+  platform_ref: string | null;
+  method: string;
 };
 
 const ROW_ACTION =
@@ -53,16 +58,26 @@ export async function GET(req: Request) {
   );
 }
 
+const PREFILLABLE = ["project_url", "url", "space", "endpoint", "appwrite_project"];
+
+/** Only the scan's known field names are carried from the query string into a form. */
+function prefillFrom(query: Record<string, string | string[] | undefined>): Prefill {
+  return Object.fromEntries(
+    PREFILLABLE.map((k) => [k, typeof query[k] === "string" ? query[k] : undefined]),
+  );
+}
+
 export default async function ProjectPage({ params, searchParams }: PageProps<"/projects/[id]">) {
   const { id } = await params;
-  const { error, added, queued, add } = await searchParams;
+  const query = await searchParams;
+  const { error, added, queued, add, restore, checked } = query;
   const session = await requireUser();
   const { supabase, user } = session;
 
   const { data: project } = await supabase
     .from("projects")
     .select(
-      "id, name, repo_url, targets (id, url, platform, heartbeat_type, interval_seconds, secret)",
+      "id, name, repo_url, github_id, scan, scanned_at, targets (id, url, platform, heartbeat_type, interval_seconds, secret, platform_ref, method)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -116,11 +131,31 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
         </section>
 
         {error && (
-          <p
+          <div
             role="alert"
-            className="mt-8 max-w-2xl rounded-xl border border-dead/40 bg-dead/10 px-4 py-3 text-[15px] text-dead"
+            className="mt-8 max-w-2xl rounded-xl border border-dead/40 bg-dead/10 px-5 py-4 text-[15px] text-dead"
           >
-            {error}
+            <p>
+              <span className="font-semibold">Not saved.</span> {error}
+            </p>
+            {typeof restore === "string" && isRestoreLink(restore) && (
+              <a
+                href={restore}
+                className="mt-2 inline-block font-semibold underline underline-offset-4"
+              >
+                Open the project to restore it
+              </a>
+            )}
+          </div>
+        )}
+        {added && checked && (
+          <p
+            role="status"
+            className="mt-8 max-w-2xl rounded-xl border border-alive/40 bg-alive/10 px-5 py-4 text-[15px] text-alive"
+          >
+            {checked === "waking"
+              ? "Saved. It took a while to answer, which usually means it was asleep and is waking up now. The next check will confirm."
+              : `Saved, and the first check passed (${checked}). It is being kept awake from now on.`}
           </p>
         )}
         {queued && (
@@ -173,6 +208,14 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
           )}
         </section>
 
+        <FoundPanel
+          projectId={project.id}
+          scan={(project.scan as RepoScan | null) ?? null}
+          scannedAt={project.scanned_at}
+          fromGithub={project.github_id !== null}
+          keptUrls={targets.map((t) => t.url)}
+        />
+
         <section id="add" className="mt-14 scroll-mt-8">
           <h2 className="text-xl font-semibold">Add a backend</h2>
           <p className="mt-1 mb-5 text-[15px] text-muted">Where does this project run?</p>
@@ -181,6 +224,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
             projectId={project.id}
             minInterval={limits.minInterval()}
             heartbeatTypes={limits.allowedHeartbeatTypes()}
+            prefill={prefillFrom(query)}
           />
         </section>
       </main>
