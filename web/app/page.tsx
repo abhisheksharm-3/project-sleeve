@@ -84,7 +84,7 @@ export default function LandingPage() {
               </span>
             </div>
           </div>
-          <div className="mt-[5vh] flex min-h-0 flex-1 items-end overflow-hidden border-b-2 border-line">
+          <div className="mt-[5vh] flex min-h-24 flex-1 items-end overflow-hidden border-b-2 border-line [container-type:size]">
             <Skyline />
           </div>
         </section>

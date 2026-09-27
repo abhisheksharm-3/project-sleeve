@@ -37,12 +37,20 @@ export const UNLIT = new Set([
   "12-0-3",
 ]);
 
-const WINDOW = 14;
+const WINDOW_W = 14;
+const WINDOW_H = 20;
 const GAP = 8;
 const PAD = 12;
 const TALLEST = Math.max(...BUILDINGS.map((b) => b.rows));
 /** Tallest building: its window rows and gaps, padding, and the 1px top border. */
-const ROW_HEIGHT = TALLEST * 20 + (TALLEST - 1) * GAP + PAD * 2 + 1;
+const ROW_HEIGHT = TALLEST * WINDOW_H + (TALLEST - 1) * GAP + PAD * 2 + 1;
+
+/**
+ * Every size is a multiple of --u: 1px at full size, less when the container is shorter
+ * than the tallest building, so buildings shrink whole instead of being cut at the top.
+ * The container sets `container-type: size`; without one it stays at full size.
+ */
+const u = (n: number) => `calc(${n} * var(--u))`;
 
 export function Skyline() {
   let order = 0;
@@ -50,21 +58,26 @@ export function Skyline() {
     <div
       aria-hidden
       className="flex w-full flex-wrap items-end justify-between gap-x-3 overflow-hidden sm:gap-x-4"
-      style={{ height: ROW_HEIGHT }}
+      style={
+        {
+          "--u": `min(1px, calc(100cqh / ${ROW_HEIGHT}))`,
+          height: u(ROW_HEIGHT),
+        } as React.CSSProperties
+      }
     >
       {BUILDINGS.map((b, bi) => (
         <div
           key={b.id}
           className="flex shrink-0 flex-col justify-end"
-          style={{ height: ROW_HEIGHT }}
+          style={{ height: u(ROW_HEIGHT) }}
         >
           <div
             className="rounded-t-lg border border-b-0 border-line bg-surface"
-            style={{ padding: PAD }}
+            style={{ padding: u(PAD) }}
           >
             <div
               className="grid"
-              style={{ gridTemplateColumns: `repeat(${b.cols}, ${WINDOW}px)`, gap: GAP }}
+              style={{ gridTemplateColumns: `repeat(${b.cols}, ${u(WINDOW_W)})`, gap: u(GAP) }}
             >
               {Array.from({ length: b.cols * b.rows }, (_, i) => {
                 const key = `${bi}-${Math.floor(i / b.cols)}-${i % b.cols}`;
@@ -80,8 +93,8 @@ export function Skyline() {
                 return (
                   <span
                     key={key}
-                    className={`h-5 rounded-[3px] ${look}`}
-                    style={delay ? { animationDelay: delay } : undefined}
+                    className={`rounded-[3px] ${look}`}
+                    style={{ height: u(WINDOW_H), animationDelay: delay }}
                   />
                 );
               })}
