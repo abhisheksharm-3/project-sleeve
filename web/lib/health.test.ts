@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bufferText, type Health, stateOf } from "./health.ts";
+import { bufferText, type Health, passRate, stateOf } from "./health.ts";
 
 const NOW = Date.parse("2026-09-27T12:00:00Z");
 const h = (over: Partial<Health>): Health => ({
@@ -46,4 +46,12 @@ test("bufferText reads in days and hours, minutes near the end, and null without
     "pause window passed 2h ago",
   );
   assert.equal(bufferText(h({ pause_at: null }), NOW), null);
+});
+
+test("passRate weights by checks run, and is null with no checks", () => {
+  assert.equal(
+    passRate([h({ pings_7d: 90, uptime_7d: 100 }), h({ pings_7d: 10, uptime_7d: 0 })]),
+    90,
+  );
+  assert.equal(passRate([h({ pings_7d: 0, uptime_7d: null })]), null);
 });

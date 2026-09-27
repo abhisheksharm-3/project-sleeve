@@ -4,7 +4,7 @@ import { Window } from "@/app/components/window";
 import { PLATFORM_NAMES, statusOf, targetTitle } from "@/lib/describe";
 import { entitlements } from "@/lib/entitlements";
 import { ago } from "@/lib/format";
-import { bufferText, type Health, type State } from "@/lib/health";
+import { bufferText, type Health, passRate, type State } from "@/lib/health";
 import { loadHealth } from "@/lib/load-health";
 import { requireUser } from "@/lib/session";
 
@@ -26,14 +26,6 @@ type Project = {
 
 const TROUBLE: State[] = ["failing", "paused", "pause_soon"];
 const RANK: Record<State, number> = { paused: 0, failing: 1, pause_soon: 2, idle: 3, alive: 4 };
-
-/** Checks passed across targets, weighted by how many each ran, so a new target cannot skew it. */
-function passRate(rows: Health[]): number | null {
-  const pings = rows.reduce((n, h) => n + h.pings_7d, 0);
-  if (!pings) return null;
-  const ok = rows.reduce((n, h) => n + ((h.uptime_7d ?? 0) / 100) * h.pings_7d, 0);
-  return Math.round((ok / pings) * 1000) / 10;
-}
 
 function splitName(name: string) {
   const [owner, repo] = name.includes("/") ? name.split("/") : ["", name];

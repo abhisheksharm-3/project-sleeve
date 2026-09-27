@@ -122,6 +122,13 @@ function RenderForm({ projectId, prefill }: FormProps) {
         label="Service URL"
         placeholder="https://my-api.onrender.com/health"
       />
+      <label className="flex items-start gap-3 text-sm leading-relaxed text-muted">
+        <input type="checkbox" name="separate_workspace" className="mt-1 size-4 accent-alive" />
+        <span>
+          This service is in a different Render workspace from any other service I keep awake here.
+          Only needed if you already have one.
+        </span>
+      </label>
       <button type="submit" className={BUTTON}>
         Add Render target
       </button>

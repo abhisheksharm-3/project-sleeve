@@ -42,3 +42,11 @@ export function bufferText(h: Health | undefined, now = Date.now()): string | nu
   const days = Math.floor(hours / 24);
   return days > 0 ? `${days}d ${hours % 24}h before pause` : `${hours}h before pause`;
 }
+
+/** Checks passed across targets, weighted by how many each ran, so a new target cannot skew it. */
+export function passRate(rows: Health[]): number | null {
+  const pings = rows.reduce((n, r) => n + r.pings_7d, 0);
+  if (!pings) return null;
+  const ok = rows.reduce((n, r) => n + ((r.uptime_7d ?? 0) / 100) * r.pings_7d, 0);
+  return Math.round((ok / pings) * 1000) / 10;
+}

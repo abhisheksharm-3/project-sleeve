@@ -108,6 +108,20 @@ export async function rescanProject(formData: FormData) {
   redirect(`/projects/${id}?scanned=1#found`);
 }
 
+/** Publishing is the owner's choice alone; the RLS read proves they own the project first. */
+export async function setPublic(formData: FormData) {
+  const { supabase } = await requireUser();
+  const id = String(formData.get("project_id") ?? "");
+  const { data: project } = await supabase.from("projects").select("id").eq("id", id).maybeSingle();
+  if (!project) fail("/dashboard", "That project is not yours.");
+  await createAdminClient()
+    .from("projects")
+    .update({ public: formData.get("public") === "true" })
+    .eq("id", id);
+  revalidatePath(`/projects/${id}`);
+  redirect(`/projects/${id}#share`);
+}
+
 export async function createProject(formData: FormData) {
   const { user } = await requireUser();
   const name = String(formData.get("name") ?? "")
@@ -182,8 +196,30 @@ async function readCustomTarget(
   };
 }
 
-/** Any inbound HTTP request resets Render's 15-minute spin-down clock. */
-async function readRenderTarget(formData: FormData, back: string): Promise<NewTarget> {
+/**
+ * Any inbound HTTP request resets Render's 15-minute spin-down clock. A workspace gets 750
+ * free hours a month and one service kept awake uses about 744, so a second one in the same
+ * workspace would get every free service in it suspended mid-month.
+ */
+async function readRenderTarget(
+  formData: FormData,
+  back: string,
+  userId: string,
+): Promise<NewTarget> {
+  const ids = await userProjectIds(userId);
+  const { count } = ids.length
+    ? await createAdminClient()
+        .from("targets")
+        .select("id", { count: "exact", head: true })
+        .eq("platform", "render")
+        .in("project_id", ids)
+    : { count: 0 };
+  if ((count ?? 0) > 0 && formData.get("separate_workspace") !== "on") {
+    fail(
+      `${back}?add=render`,
+      "You already keep a Render service awake. Two in the same workspace use up its 750 free hours and Render suspends all its free services mid-month. If this one is in a different workspace, tick the box and add it again.",
+    );
+  }
   const check = await validateTargetUrl(String(formData.get("url") ?? ""));
   if (!check.ok) fail(back, check.reason);
   return {
@@ -246,12 +282,17 @@ async function readAppwriteTarget(formData: FormData, back: string): Promise<New
   };
 }
 
-async function readTarget(formData: FormData, back: string, allowed: string[]): Promise<NewTarget> {
+async function readTarget(
+  formData: FormData,
+  back: string,
+  allowed: string[],
+  userId: string,
+): Promise<NewTarget> {
   switch (formData.get("kind")) {
     case "supabase":
       return readSupabaseTarget(formData, back);
     case "render":
-      return readRenderTarget(formData, back);
+      return readRenderTarget(formData, back, userId);
     case "appwrite":
       return readAppwriteTarget(formData, back);
     case "huggingface":
@@ -278,7 +319,12 @@ export async function addTarget(formData: FormData) {
     fail(back, `The ${limits.planName} plan allows ${limits.limits.max_targets} targets.`);
   }
 
-  const { cadence, ...target } = await readTarget(formData, back, limits.allowedHeartbeatTypes());
+  const { cadence, ...target } = await readTarget(
+    formData,
+    back,
+    limits.allowedHeartbeatTypes(),
+    user.id,
+  );
 
   const requested = Number(formData.get("interval_seconds"));
   const interval = limits.clampInterval(

@@ -11,6 +11,7 @@ import { isRestoreLink } from "@/lib/probe";
 import type { RepoScan } from "@/lib/repo-scan";
 import { requireUser } from "@/lib/session";
 import { FoundPanel } from "./found-panel";
+import { SharePanel } from "./share-panel";
 import { AddTarget, type Prefill } from "./target-forms";
 
 /** One project: the backends kept awake, and a two-step way to add another. */
@@ -77,7 +78,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
   const { data: project } = await supabase
     .from("projects")
     .select(
-      "id, name, repo_url, github_id, scan, scanned_at, targets (id, url, platform, heartbeat_type, interval_seconds, secret, platform_ref, method)",
+      "id, name, repo_url, github_id, scan, scanned_at, public, targets (id, url, platform, heartbeat_type, interval_seconds, secret, platform_ref, method)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -227,6 +228,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
             prefill={prefillFrom(query)}
           />
         </section>
+        <SharePanel projectId={project.id} isPublic={project.public} />
       </main>
     </div>
   );
