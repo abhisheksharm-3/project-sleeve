@@ -26,6 +26,13 @@ Live at [projectsleeve.vercel.app](https://projectsleeve.vercel.app).
   if it pauses anyway.
 - **Watches and tells you.** A dashboard with each backend's last 30 days, alerts when
   checks fail or a pause is close, and a Monday digest, over Discord or Slack.
+- **Shared projects.** Invite a teammate with a single-use link. They see the project and
+  its history, get its alerts and digest, and can run checks and maintenance; only the
+  owner changes what is kept awake. Nobody but the service role can read a backend's
+  secret.
+- **Scheduled jobs and maintenance.** A cron job or script can ping a heartbeat URL and
+  alert when it goes quiet, and any backend can go into maintenance, which holds alerts and
+  shows as planned on status pages while checks keep running.
 - **Public status pages.** Pick backends, name them, post notices, and share a page with
   90-day uptime, response times and outage history, plus a badge, an embeddable image
   and an iframe widget.
