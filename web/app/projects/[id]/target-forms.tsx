@@ -1,5 +1,6 @@
 /** The add-target forms, one per platform, each asking only for what that platform needs. */
 import { addTarget } from "@/app/projects/actions";
+import { APPWRITE_COLUMN, APPWRITE_DATABASE_ID, APPWRITE_TABLE_ID } from "@/lib/appwrite";
 import { every } from "@/lib/format";
 import { KEEPALIVE_SQL } from "@/lib/target-url";
 
@@ -140,6 +141,43 @@ export function TargetForms({
         <Field id="space" label="space id or url" placeholder="owner/space-name" />
         <button type="submit" className={BUTTON}>
           Add Space
+        </button>
+      </form>
+
+      <form action={addTarget} className="space-y-4">
+        <Hidden projectId={projectId} kind="appwrite" />
+        <h2 className={HEADING}>Appwrite Cloud</h2>
+        <p className="text-sm text-muted">
+          Appwrite pauses a free project after 7 days without development activity, and reads do not
+          count. So we write: one row, always the same row, holding a timestamp. Set it up once:
+        </p>
+        <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted">
+          <li>
+            Databases → create a database with id{" "}
+            <span className="font-mono text-text">{APPWRITE_DATABASE_ID}</span>.
+          </li>
+          <li>
+            In it, create a table with id{" "}
+            <span className="font-mono text-text">{APPWRITE_TABLE_ID}</span>, and add a string
+            column <span className="font-mono text-text">{APPWRITE_COLUMN}</span> of size 40.
+          </li>
+          <li>
+            Overview → API keys → create a key with{" "}
+            <span className="font-mono text-text">only</span> the{" "}
+            <span className="font-mono text-text">rows.write</span> scope. It cannot read your data
+            or change your schema.
+          </li>
+          <li>Paste the endpoint, project id and key below.</li>
+        </ol>
+        <p className="border border-warn/40 bg-warn/5 px-3 py-2 text-xs leading-relaxed text-warn">
+          Appwrite says only Console activity keeps a project awake. Whether a write counts is not
+          yet proven. Every write is logged here, so you will see it the day one fails.
+        </p>
+        <Field id="endpoint" label="api endpoint" placeholder="https://fra.cloud.appwrite.io/v1" />
+        <Field id="appwrite_project" label="project id" placeholder="6523f1a2b3c4d5e6f7a8" />
+        <Field id="appwrite_key" label="api key — rows.write scope only" placeholder="standard_…" />
+        <button type="submit" className={BUTTON}>
+          Add Appwrite target
         </button>
       </form>
 

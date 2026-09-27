@@ -9,6 +9,7 @@ const baseJob: Job = {
   heartbeat_type: "plain",
   secret: null,
   platform: "custom",
+  platform_ref: null,
 };
 
 Deno.test("runHeartbeat: 200 → ok with status and latency", async () => {
@@ -259,4 +260,42 @@ Deno.test("runHeartbeat: uses the platform deadline when none is given", async (
   assertEquals(aborted, false, "a 20s cold start must not trip a 45s deadline");
   assertEquals(r.ok, true);
   assert(performance.now() - started >= 19_000);
+});
+
+Deno.test("runHeartbeat: an appwrite db_write upserts one timestamp row with Appwrite headers", async () => {
+  let seen: { method?: string; headers?: Headers; body?: string } = {};
+  const fetchFn = ((_u: string | URL | Request, init: RequestInit) => {
+    seen = { method: init.method, headers: new Headers(init.headers), body: String(init.body) };
+    return Promise.resolve(new Response("", { status: 200 }));
+  }) as unknown as typeof fetch;
+
+  const r = await runHeartbeat({
+    ...baseJob,
+    platform: "appwrite",
+    heartbeat_type: "db_write",
+    url: "https://fra.cloud.appwrite.io/v1/tablesdb/sleeve/tables/heartbeats/rows/sleeve",
+    secret: "standard_rowswrite",
+    platform_ref: "proj123",
+  }, { fetchFn });
+
+  assertEquals(r.ok, true);
+  assertEquals(seen.method, "PUT");
+  assertEquals(seen.headers?.get("x-appwrite-project"), "proj123");
+  assertEquals(seen.headers?.get("x-appwrite-key"), "standard_rowswrite");
+  assertEquals(seen.headers?.get("content-type"), "application/json");
+  assertEquals(seen.headers?.get("authorization"), null, "the Appwrite key must not travel as a bearer token");
+  const body = JSON.parse(seen.body ?? "{}");
+  assertEquals(Object.keys(body.data), ["beat"], "we write a timestamp and nothing else");
+  assert(!Number.isNaN(Date.parse(body.data.beat)));
+});
+
+Deno.test("runHeartbeat: db_write without a project ref fails before any request", async () => {
+  let called = false;
+  const fetchFn = (() => {
+    called = true;
+    return Promise.resolve(new Response("", { status: 200 }));
+  }) as unknown as typeof fetch;
+  const r = await runHeartbeat({ ...baseJob, platform: "appwrite", heartbeat_type: "db_write", secret: "k", platform_ref: null }, { fetchFn });
+  assertEquals(r.ok, false);
+  assertEquals(called, false);
 });

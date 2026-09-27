@@ -3,6 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { appwriteRowUrl, isAppwriteId } from "@/lib/appwrite";
 import { entitlements } from "@/lib/entitlements";
 import { track } from "@/lib/events";
 import { GitHubTokenMissing, listRepos } from "@/lib/github";
@@ -97,6 +98,8 @@ type NewTarget = {
   heartbeat_type: string;
   secret: string | null;
   cadence?: number;
+  method?: string;
+  platform_ref?: string;
 };
 
 const RENDER_CADENCE = 600;
@@ -169,12 +172,35 @@ async function readHuggingFaceTarget(
   };
 }
 
+/**
+ * Appwrite ignores every read toward its inactivity check, so the heartbeat is a write
+ * into the table the user created for us, with a key scoped to rows.write only.
+ */
+async function readAppwriteTarget(formData: FormData, back: string): Promise<NewTarget> {
+  const url = appwriteRowUrl(String(formData.get("endpoint") ?? ""));
+  if (!url) fail(back, "Use your Appwrite Cloud endpoint, e.g. https://fra.cloud.appwrite.io/v1.");
+  const projectId = String(formData.get("appwrite_project") ?? "").trim();
+  if (!isAppwriteId(projectId)) fail(back, "That does not look like an Appwrite project id.");
+  const key = String(formData.get("appwrite_key") ?? "").trim();
+  if (key.length < 20) fail(back, "Paste the API key you created with the rows.write scope.");
+  return {
+    platform: "appwrite",
+    url,
+    heartbeat_type: "db_write",
+    secret: key,
+    method: "PUT",
+    platform_ref: projectId,
+  };
+}
+
 async function readTarget(formData: FormData, back: string, allowed: string[]): Promise<NewTarget> {
   switch (formData.get("kind")) {
     case "supabase":
       return readSupabaseTarget(formData, back);
     case "render":
       return readRenderTarget(formData, back);
+    case "appwrite":
+      return readAppwriteTarget(formData, back);
     case "huggingface":
       return readHuggingFaceTarget(formData, back, INTERVALS[0]);
     default:

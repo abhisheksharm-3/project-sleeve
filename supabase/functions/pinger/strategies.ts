@@ -15,9 +15,11 @@ export type Job = {
   target_id: string;
   url: string;
   method: string;
-  heartbeat_type: "plain" | "db_query" | "synthetic";
+  heartbeat_type: "plain" | "db_query" | "db_write" | "synthetic";
   secret: string | null;
   platform: string;
+  /** The platform's own id for the target, e.g. an Appwrite project id. */
+  platform_ref: string | null;
 };
 
 export type PingResult = {
@@ -62,6 +64,42 @@ function describeError(e: unknown, timeoutMs: number): string {
   return message.slice(0, MAX_ERROR_CHARS);
 }
 
+/**
+ * Appwrite's inactivity check ignores reads, so its heartbeat upserts one row, always the
+ * same row, holding only a timestamp. The key travels as X-Appwrite-Key and never as a
+ * bearer token. Returns null when a write target has no project id to address.
+ */
+function appwriteWrite(job: Job): RequestInit | null {
+  if (!job.platform_ref || !job.secret) return null;
+  return {
+    method: "PUT",
+    headers: {
+      "content-type": "application/json",
+      "x-appwrite-project": job.platform_ref,
+      "x-appwrite-key": job.secret,
+    },
+    body: JSON.stringify({ data: { beat: new Date().toISOString() } }),
+  };
+}
+
+/**
+ * Supabase's gateway authenticates on apikey and answers a bearer-only request with 401,
+ * so its key is sent both ways. db_query tells a user's own route to run a real query.
+ */
+function readRequest(job: Job): RequestInit {
+  const headers = new Headers();
+  if (job.secret) {
+    headers.set("authorization", `Bearer ${job.secret}`);
+    if (job.platform === "supabase") headers.set("apikey", job.secret);
+  }
+  if (job.heartbeat_type === "db_query") headers.set("x-sleeve-mode", "db_query");
+  return { method: job.method, headers };
+}
+
+function buildRequest(job: Job): RequestInit | null {
+  return job.heartbeat_type === "db_write" ? appwriteWrite(job) : readRequest(job);
+}
+
 export async function runHeartbeat(job: Job, opts: HeartbeatOptions = {}): Promise<PingResult> {
   const { fetchFn = fetch, now = () => performance.now() } = opts;
   const timeoutMs = opts.timeoutMs ?? deadlineFor(job.platform);
@@ -89,25 +127,14 @@ export async function runHeartbeat(job: Job, opts: HeartbeatOptions = {}): Promi
     };
   }
 
-  const headers = new Headers();
-  if (job.secret) {
-    headers.set("authorization", `Bearer ${job.secret}`);
-    // Platform-aware, which is the whole point: Supabase's gateway authenticates on the
-    // apikey header and answers a bearer-only request with 401, so without this the ping
-    // never reaches PostgREST and never touches Postgres. The key here is the project's
-    // anon key, which is public by design.
-    if (job.platform === "supabase") headers.set("apikey", job.secret);
+  const request = buildRequest(job);
+  if (!request) {
+    return { ok: false, status_code: null, latency_ms: null, error: "missing platform_ref" };
   }
-  // tells the user's snippet to run a real query rather than return a static 200
-  if (job.heartbeat_type === "db_query") headers.set("x-sleeve-mode", "db_query");
 
   const start = now();
   try {
-    const res = await fetchFn(job.url, {
-      method: job.method,
-      headers,
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    const res = await fetchFn(job.url, { ...request, signal: AbortSignal.timeout(timeoutMs) });
     const latency_ms = Math.round(now() - start);
     // Data minimization: we read the status line and nothing else. Cancelling the body
     // releases the connection without pulling the user's data into memory.
