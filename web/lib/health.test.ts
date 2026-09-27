@@ -11,6 +11,7 @@ const h = (over: Partial<Health>): Health => ({
   failures_since_ok: 0,
   pings_7d: 28,
   uptime_7d: 100,
+  latency_7d: null,
   pause_at: "2026-10-04T11:00:00Z",
   ...over,
 });

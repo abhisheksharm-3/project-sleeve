@@ -5,7 +5,12 @@ export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
 
 const LIT = "#f4b860";
-const WINDOWS = [LIT, "rgb(244 184 96 / 0.35)", "#2c2c33", LIT];
+const WINDOWS = [
+  { id: "top-left", color: LIT },
+  { id: "top-right", color: "rgb(244 184 96 / 0.35)" },
+  { id: "bottom-left", color: "#2c2c33" },
+  { id: "bottom-right", color: LIT },
+];
 
 export default function AppleIcon() {
   return new ImageResponse(
@@ -30,11 +35,8 @@ export default function AppleIcon() {
           borderRadius: 8,
         }}
       >
-        {WINDOWS.map((color, i) => (
-          <div
-            key={`w${i}`}
-            style={{ width: 25, height: 32, borderRadius: 4, background: color }}
-          />
+        {WINDOWS.map((w) => (
+          <div key={w.id} style={{ width: 25, height: 32, borderRadius: 4, background: w.color }} />
         ))}
       </div>
     </div>,

@@ -10,6 +10,7 @@ export type Health = {
   pings_7d: number;
   uptime_7d: number | null;
   pause_at: string | null;
+  latency_7d: number | null;
 };
 
 export type State = "idle" | "alive" | "failing" | "pause_soon" | "paused";

@@ -10,7 +10,7 @@ import { type NextRequest, NextResponse } from "next/server";
  * database refuses to hand over rows the caller does not own regardless of what happens here.
  */
 /** Everything else requires a session. "/" is the public landing page. */
-const PUBLIC_PREFIXES = ["/login", "/auth", "/status/", "/badge/"];
+const PUBLIC_PREFIXES = ["/login", "/auth", "/status/", "/badge/", "/s/"];
 const PUBLIC_EXACT = ["/", "/opengraph-image", "/apple-icon"];
 
 export async function proxy(request: NextRequest) {

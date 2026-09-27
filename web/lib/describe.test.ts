@@ -17,6 +17,7 @@ const ok = {
   failures_since_ok: 0,
   pings_7d: 20,
   uptime_7d: 100,
+  latency_7d: null,
   pause_at: "2026-10-04T10:00:00Z",
 };
 

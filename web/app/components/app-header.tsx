@@ -26,6 +26,9 @@ export async function AppHeader({ session }: { session: Session }) {
         <Link href="/dashboard" className={link}>
           Projects
         </Link>
+        <Link href="/status-pages" className={link}>
+          Status pages
+        </Link>
         {isAdmin(user.id) && (
           <Link href="/insights" className={link}>
             Platform benchmarks
