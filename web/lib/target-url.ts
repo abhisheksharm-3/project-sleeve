@@ -99,10 +99,27 @@ export async function validateTargetUrl(
 }
 
 /**
- * The URL that actually resets a Supabase project's inactivity clock: a table read through
- * PostgREST. The /rest/v1/ root answers 401 to an anon key on current projects.
+ * The SQL a user runs once so a ping can reach Postgres without being granted any table.
+ * Measured: 20 of 20 calls through PostgREST executed it inside Postgres. The trailing
+ * notify matters: without it PostgREST's schema cache answers 404 until it next reloads.
  */
-export function supabaseTableUrl(projectUrl: string, table: string): string | null {
+export const KEEPALIVE_SQL = `create or replace function public.keepalive() returns int
+language sql stable
+set search_path = ''
+as 'select 1';
+
+revoke all on function public.keepalive() from public;
+grant execute on function public.keepalive() to anon;
+
+notify pgrst, 'reload schema';`;
+
+/**
+ * The request that resets a Supabase project's inactivity clock. With a table it is a
+ * one-row read; without one it calls the keepalive() function above, which works even when
+ * the anon role has been granted no tables. The /rest/v1/ root is never used: it answers
+ * 401 to anon keys on current projects.
+ */
+export function supabaseTargetUrl(projectUrl: string, table = ""): string | null {
   let base: URL;
   try {
     base = new URL(projectUrl.trim());
@@ -110,6 +127,8 @@ export function supabaseTableUrl(projectUrl: string, table: string): string | nu
     return null;
   }
   if (!/^[a-z0-9]{20}\.supabase\.co$/.test(base.hostname)) return null;
-  if (!/^[A-Za-z_][A-Za-z0-9_]{0,62}$/.test(table.trim())) return null;
-  return `https://${base.hostname}/rest/v1/${table.trim()}?limit=1`;
+  const name = table.trim();
+  if (!name) return `https://${base.hostname}/rest/v1/rpc/keepalive`;
+  if (!/^[A-Za-z_][A-Za-z0-9_]{0,62}$/.test(name)) return null;
+  return `https://${base.hostname}/rest/v1/${name}?limit=1`;
 }

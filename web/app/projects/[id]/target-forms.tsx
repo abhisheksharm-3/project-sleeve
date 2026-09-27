@@ -1,6 +1,7 @@
 /** The add-target forms, one per platform, each asking only for what that platform needs. */
 import { addTarget } from "@/app/projects/actions";
 import { every } from "@/lib/format";
+import { KEEPALIVE_SQL } from "@/lib/target-url";
 
 const FIELD =
   "w-full border border-line bg-ink px-3 py-2 font-mono text-sm placeholder:text-muted/60";
@@ -71,10 +72,13 @@ export function TargetForms({
         <Hidden projectId={projectId} kind="supabase" />
         <h2 className={HEADING}>Supabase</h2>
         <p className="text-sm text-muted">
-          We read one row from a table through its REST API: a real query, which resets the 7-day
-          pause clock. The <span className="font-mono">/rest/v1/</span> root refuses anon keys, so
-          name a table.
+          Supabase pauses a free project after 7 days without database activity. Run this once in
+          your project&apos;s SQL editor. It adds a function that returns 1 and exposes nothing
+          else, and every ping runs it inside Postgres.
         </p>
+        <pre className="overflow-x-auto border border-line bg-ink p-3 font-mono text-xs leading-relaxed select-all">
+          {KEEPALIVE_SQL}
+        </pre>
         <Field
           id="project_url"
           label="project url"
@@ -85,7 +89,18 @@ export function TargetForms({
           label="anon key — never the service-role key"
           placeholder="eyJhbGciOi… or sb_publishable_…"
         />
-        <Field id="table" label="any table the anon key can read" placeholder="profiles" />
+        <div>
+          <label className={LABEL} htmlFor="table">
+            or read a table instead — optional
+          </label>
+          <input
+            id="table"
+            name="table"
+            autoComplete="off"
+            placeholder="leave empty to use keepalive()"
+            className={FIELD}
+          />
+        </div>
         <IntervalField id="supabase_interval" min={minInterval} />
         <button type="submit" className={BUTTON}>
           Add Supabase target

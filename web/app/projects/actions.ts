@@ -10,7 +10,7 @@ import { cadenceForSpace, parseSpaceId, resolveSpace } from "@/lib/huggingface";
 import { requireUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isPublicSupabaseKey } from "@/lib/supabase-key";
-import { supabaseTableUrl, validateTargetUrl } from "@/lib/target-url";
+import { supabaseTargetUrl, validateTargetUrl } from "@/lib/target-url";
 
 const INTERVALS = [21_600, 43_200, 86_400];
 
@@ -102,11 +102,15 @@ type NewTarget = {
 const RENDER_CADENCE = 600;
 
 async function readSupabaseTarget(formData: FormData, back: string): Promise<NewTarget> {
-  const url = supabaseTableUrl(
+  const url = supabaseTargetUrl(
     String(formData.get("project_url") ?? ""),
     String(formData.get("table") ?? ""),
   );
-  if (!url) fail(back, "Use your project URL (https://<ref>.supabase.co) and a table name.");
+  if (!url)
+    fail(
+      back,
+      "Use your project URL (https://<ref>.supabase.co) and a plain table name if you give one.",
+    );
   const key = String(formData.get("anon_key") ?? "").trim();
   if (!isPublicSupabaseKey(key)) {
     fail(back, "That is not an anon or publishable key. Never paste a service-role key anywhere.");

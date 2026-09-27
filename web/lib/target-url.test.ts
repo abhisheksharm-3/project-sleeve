@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isBlockedAddress, supabaseTableUrl, validateTargetUrl } from "./target-url.ts";
+import { isBlockedAddress, supabaseTargetUrl, validateTargetUrl } from "./target-url.ts";
 
 const publicDns = async () => [{ address: "93.184.216.34" }];
 const privateDns = async () => [{ address: "10.0.0.5" }];
@@ -52,12 +52,16 @@ test("validateTargetUrl refuses literal private IPs, other schemes, credentials 
   }
 });
 
-test("supabaseTableUrl builds a table read and rejects anything else", () => {
+test("supabaseTargetUrl builds a table read and rejects anything else", () => {
   assert.equal(
-    supabaseTableUrl("https://nujgeowsnjculknvimbh.supabase.co", "profiles"),
+    supabaseTargetUrl("https://nujgeowsnjculknvimbh.supabase.co", "profiles"),
     "https://nujgeowsnjculknvimbh.supabase.co/rest/v1/profiles?limit=1",
   );
-  assert.equal(supabaseTableUrl("https://evil.com", "profiles"), null);
-  assert.equal(supabaseTableUrl("https://nujgeowsnjculknvimbh.supabase.co", "x; drop"), null);
-  assert.equal(supabaseTableUrl("https://nujgeowsnjculknvimbh.supabase.co", "../auth"), null);
+  assert.equal(supabaseTargetUrl("https://evil.com", "profiles"), null);
+  assert.equal(supabaseTargetUrl("https://nujgeowsnjculknvimbh.supabase.co", "x; drop"), null);
+  assert.equal(supabaseTargetUrl("https://nujgeowsnjculknvimbh.supabase.co", "../auth"), null);
+  assert.equal(
+    supabaseTargetUrl("https://nujgeowsnjculknvimbh.supabase.co", "  "),
+    "https://nujgeowsnjculknvimbh.supabase.co/rest/v1/rpc/keepalive",
+  );
 });
