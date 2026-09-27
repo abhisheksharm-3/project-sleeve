@@ -39,6 +39,18 @@ export type HeartbeatOptions = {
  */
 export const DEFAULT_TIMEOUT_MS = 15_000;
 
+/**
+ * Platforms that cold-start hold the request while the service wakes: a sleeping Space
+ * answered 200 after 16.3s when measured, and Render quotes about a minute. Cutting those
+ * off at 15s would log a successful wake as a failure. 45s stays under pg_net's 55s
+ * dispatch timeout and far under the reaper's 300s.
+ */
+const COLD_START_TIMEOUT_MS: Record<string, number> = { huggingface: 45_000, render: 45_000 };
+
+export function deadlineFor(platform: string): number {
+  return COLD_START_TIMEOUT_MS[platform] ?? DEFAULT_TIMEOUT_MS;
+}
+
 const MAX_ERROR_CHARS = 300;
 
 /** ping_log.error is an error taxonomy, not a transcript (spec §8). */
@@ -51,7 +63,8 @@ function describeError(e: unknown, timeoutMs: number): string {
 }
 
 export async function runHeartbeat(job: Job, opts: HeartbeatOptions = {}): Promise<PingResult> {
-  const { fetchFn = fetch, now = () => performance.now(), timeoutMs = DEFAULT_TIMEOUT_MS } = opts;
+  const { fetchFn = fetch, now = () => performance.now() } = opts;
+  const timeoutMs = opts.timeoutMs ?? deadlineFor(job.platform);
 
   if (job.heartbeat_type === "synthetic") {
     return { ok: false, status_code: null, latency_ms: null, error: "NotImplemented: synthetic" };

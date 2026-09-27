@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { entitlements } from "@/lib/entitlements";
 import { track } from "@/lib/events";
 import { GitHubTokenMissing, listRepos } from "@/lib/github";
+import { cadenceForSpace, parseSpaceId, resolveSpace } from "@/lib/huggingface";
 import { requireUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isPublicSupabaseKey } from "@/lib/supabase-key";
@@ -89,7 +90,16 @@ export async function createProject(formData: FormData) {
   redirect(`/projects/${data.id}`);
 }
 
-type NewTarget = { platform: string; url: string; heartbeat_type: string; secret: string | null };
+/** `cadence` is set when the platform, not the user, decides how often to ping. */
+type NewTarget = {
+  platform: string;
+  url: string;
+  heartbeat_type: string;
+  secret: string | null;
+  cadence?: number;
+};
+
+const RENDER_CADENCE = 600;
 
 async function readSupabaseTarget(formData: FormData, back: string): Promise<NewTarget> {
   const url = supabaseTableUrl(
@@ -121,6 +131,53 @@ async function readCustomTarget(
   };
 }
 
+/** Any inbound HTTP request resets Render's 15-minute spin-down clock. */
+async function readRenderTarget(formData: FormData, back: string): Promise<NewTarget> {
+  const check = await validateTargetUrl(String(formData.get("url") ?? ""));
+  if (!check.ok) fail(back, check.reason);
+  return {
+    platform: "render",
+    url: check.url,
+    heartbeat_type: "plain",
+    secret: null,
+    cadence: RENDER_CADENCE,
+  };
+}
+
+/** A request to the Space's hf.space URL wakes it; measured: held 16s through a cold start. */
+async function readHuggingFaceTarget(
+  formData: FormData,
+  back: string,
+  fallback: number,
+): Promise<NewTarget> {
+  const id = parseSpaceId(String(formData.get("space") ?? ""));
+  if (!id) fail(back, "Use the Space id (owner/name) or its huggingface.co/spaces URL.");
+  const space = await resolveSpace(id);
+  if (!space) fail(back, `Could not find a public Space called ${id}.`);
+  const check = await validateTargetUrl(space.url);
+  if (!check.ok) fail(back, check.reason);
+  return {
+    platform: "huggingface",
+    url: check.url,
+    heartbeat_type: "plain",
+    secret: null,
+    cadence: cadenceForSpace(space.sleepSeconds, fallback),
+  };
+}
+
+async function readTarget(formData: FormData, back: string, allowed: string[]): Promise<NewTarget> {
+  switch (formData.get("kind")) {
+    case "supabase":
+      return readSupabaseTarget(formData, back);
+    case "render":
+      return readRenderTarget(formData, back);
+    case "huggingface":
+      return readHuggingFaceTarget(formData, back, INTERVALS[0]);
+    default:
+      return readCustomTarget(formData, back, allowed);
+  }
+}
+
 export async function addTarget(formData: FormData) {
   const { supabase, user } = await requireUser();
   const projectId = String(formData.get("project_id") ?? "");
@@ -138,13 +195,13 @@ export async function addTarget(formData: FormData) {
     fail(back, `The ${limits.planName} plan allows ${limits.limits.max_targets} targets.`);
   }
 
-  const target =
-    formData.get("kind") === "supabase"
-      ? await readSupabaseTarget(formData, back)
-      : await readCustomTarget(formData, back, limits.allowedHeartbeatTypes());
+  const { cadence, ...target } = await readTarget(formData, back, limits.allowedHeartbeatTypes());
 
   const requested = Number(formData.get("interval_seconds"));
-  const interval = limits.clampInterval(INTERVALS.includes(requested) ? requested : INTERVALS[0]);
+  const interval = limits.clampInterval(
+    cadence ?? (INTERVALS.includes(requested) ? requested : INTERVALS[0]),
+    target.platform,
+  );
 
   const { data, error } = await createAdminClient()
     .from("targets")

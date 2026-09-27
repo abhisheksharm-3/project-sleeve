@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
-import { detectPause, type Job, runHeartbeat } from "./strategies.ts";
+import { DEFAULT_TIMEOUT_MS, deadlineFor, detectPause, type Job, runHeartbeat } from "./strategies.ts";
 
 const baseJob: Job = {
   job_id: "j1",
@@ -238,4 +238,25 @@ Deno.test("runHeartbeat: a supabase target with no secret sends neither header",
       assertEquals(seen?.get("apikey"), null);
       assertEquals(seen?.get("authorization"), null);
     });
+});
+
+Deno.test("deadlineFor: cold-start platforms get longer than the default", () => {
+  assertEquals(deadlineFor("huggingface"), 45_000);
+  assertEquals(deadlineFor("render"), 45_000);
+  assertEquals(deadlineFor("supabase"), DEFAULT_TIMEOUT_MS);
+  assertEquals(deadlineFor("custom"), DEFAULT_TIMEOUT_MS);
+});
+
+Deno.test("runHeartbeat: uses the platform deadline when none is given", async () => {
+  let aborted = false;
+  const fetchFn = ((_u: string | URL | Request, init: RequestInit) =>
+    new Promise<Response>((resolve) => {
+      init.signal?.addEventListener("abort", () => (aborted = true));
+      setTimeout(() => resolve(new Response("", { status: 200 })), 20_000);
+    })) as unknown as typeof fetch;
+  const started = performance.now();
+  const r = await runHeartbeat({ ...baseJob, platform: "huggingface" }, { fetchFn });
+  assertEquals(aborted, false, "a 20s cold start must not trip a 45s deadline");
+  assertEquals(r.ok, true);
+  assert(performance.now() - started >= 19_000);
 });

@@ -1,10 +1,13 @@
 import "server-only";
+import { cadenceFloor, clampCadence } from "./cadence";
 import { createAdminClient } from "./supabase/admin";
 
 export type Limits = {
   max_projects: number;
   max_targets: number;
   min_interval_seconds: number;
+  /** Per-platform floors that replace the plan floor where a platform sleeps faster. */
+  platform_min_interval_seconds?: Record<string, number>;
   heartbeat_types: string[];
   channels: string[];
 };
@@ -20,18 +23,19 @@ export type Entitlements = {
   planId: string;
   planName: string;
   limits: Limits;
-  minInterval: () => number;
+  minInterval: (platform?: string) => number;
   allowedHeartbeatTypes: () => string[];
   canAddProject: (currentCount: number) => boolean;
   canAddTarget: (currentCount: number) => boolean;
-  /** Raise a requested cadence to the plan's floor rather than rejecting it. */
-  clampInterval: (requestedSeconds: number) => number;
+  /** Raise a requested cadence to the floor for this platform rather than rejecting it. */
+  clampInterval: (requestedSeconds: number, platform?: string) => number;
 };
 
 const FREE_FALLBACK: Limits = {
   max_projects: 5,
   max_targets: 3,
   min_interval_seconds: 21_600,
+  platform_min_interval_seconds: { render: 600, huggingface: 600 },
   heartbeat_types: ["plain", "db_query"],
   channels: ["email"],
 };
@@ -56,10 +60,10 @@ export async function entitlements(userId: string): Promise<Entitlements> {
     planId: active ? plan.id : "free",
     planName: active ? plan.name : "Free",
     limits,
-    minInterval: () => limits.min_interval_seconds,
+    minInterval: (platform) => cadenceFloor(limits, platform),
     allowedHeartbeatTypes: () => limits.heartbeat_types,
     canAddProject: (currentCount) => currentCount < limits.max_projects,
     canAddTarget: (currentCount) => currentCount < limits.max_targets,
-    clampInterval: (requestedSeconds) => Math.max(requestedSeconds, limits.min_interval_seconds),
+    clampInterval: (requestedSeconds, platform) => clampCadence(limits, requestedSeconds, platform),
   };
 }

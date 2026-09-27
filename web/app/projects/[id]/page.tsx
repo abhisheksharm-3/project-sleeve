@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { addTarget, removeTarget, testTarget } from "@/app/projects/actions";
+import { removeTarget, testTarget } from "@/app/projects/actions";
 import { entitlements } from "@/lib/entitlements";
 import { ago, every } from "@/lib/format";
 import { requireUser } from "@/lib/session";
+import { TargetForms } from "./target-forms";
 
 /** One project: its targets, their last outcome, and the forms to add more. */
 type Target = {
@@ -21,35 +22,6 @@ type Ping = {
   error: string | null;
   ran_at: string;
 };
-
-const FIELD =
-  "w-full border border-line bg-ink px-3 py-2 font-mono text-sm placeholder:text-muted/60";
-const BUTTON = "border border-line bg-surface px-4 py-2 text-sm font-medium hover:bg-raised";
-const LABEL = "mb-1.5 block font-mono text-xs text-muted";
-
-function IntervalField({ min }: { min: number }) {
-  return (
-    <div>
-      <label className={LABEL} htmlFor="interval_seconds">
-        cadence
-      </label>
-      <select
-        id="interval_seconds"
-        name="interval_seconds"
-        className={FIELD}
-        defaultValue={String(Math.max(min, 21600))}
-      >
-        {[21600, 43200, 86400]
-          .filter((s) => s >= min)
-          .map((s) => (
-            <option key={s} value={s}>
-              {every(s)}
-            </option>
-          ))}
-      </select>
-    </div>
-  );
-}
 
 /** The route a user drops into their own app so a db_query ping runs a real query. */
 function Snippet({ secret }: { secret: string }) {
@@ -196,102 +168,11 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
         )}
       </section>
 
-      <section className="mt-14 grid gap-12 lg:grid-cols-2">
-        <form action={addTarget} className="space-y-4">
-          <input type="hidden" name="project_id" value={project.id} />
-          <input type="hidden" name="kind" value="supabase" />
-          <h2 className="font-mono text-xs tracking-wide text-muted uppercase">
-            Keep a Supabase project awake
-          </h2>
-          <p className="text-sm text-muted">
-            We read one row from a table through its REST API, which is a real query and resets the
-            pause clock. The <span className="font-mono">/rest/v1/</span> root does not work: it
-            refuses anon keys.
-          </p>
-          <div>
-            <label className={LABEL} htmlFor="project_url">
-              project url
-            </label>
-            <input
-              id="project_url"
-              name="project_url"
-              required
-              placeholder="https://abcdefghijklmnopqrst.supabase.co"
-              className={FIELD}
-            />
-          </div>
-          <div>
-            <label className={LABEL} htmlFor="anon_key">
-              anon key — never the service-role key
-            </label>
-            <input
-              id="anon_key"
-              name="anon_key"
-              required
-              autoComplete="off"
-              placeholder="eyJhbGciOi… or sb_publishable_…"
-              className={FIELD}
-            />
-          </div>
-          <div>
-            <label className={LABEL} htmlFor="table">
-              any table the anon key can read
-            </label>
-            <input id="table" name="table" required placeholder="profiles" className={FIELD} />
-          </div>
-          <IntervalField min={limits.minInterval()} />
-          <button type="submit" className={BUTTON}>
-            Add Supabase target
-          </button>
-        </form>
-
-        <form action={addTarget} className="space-y-4">
-          <input type="hidden" name="project_id" value={project.id} />
-          <input type="hidden" name="kind" value="custom" />
-          <h2 className="font-mono text-xs tracking-wide text-muted uppercase">
-            Any other backend
-          </h2>
-          <p className="text-sm text-muted">
-            Choose <span className="font-mono">db_query</span> and we give you a small route to add
-            to your app, so every ping runs a real query. <span className="font-mono">plain</span>{" "}
-            only proves the URL answers.
-          </p>
-          <div>
-            <label className={LABEL} htmlFor="url">
-              url
-            </label>
-            <input
-              id="url"
-              name="url"
-              type="url"
-              required
-              placeholder="https://my-app.onrender.com/api/keepalive"
-              className={FIELD}
-            />
-          </div>
-          <div>
-            <label className={LABEL} htmlFor="heartbeat_type">
-              heartbeat
-            </label>
-            <select
-              id="heartbeat_type"
-              name="heartbeat_type"
-              className={FIELD}
-              defaultValue="db_query"
-            >
-              {limits.allowedHeartbeatTypes().map((h) => (
-                <option key={h} value={h}>
-                  {h}
-                </option>
-              ))}
-            </select>
-          </div>
-          <IntervalField min={limits.minInterval()} />
-          <button type="submit" className={BUTTON}>
-            Add target
-          </button>
-        </form>
-      </section>
+      <TargetForms
+        projectId={project.id}
+        minInterval={limits.minInterval()}
+        heartbeatTypes={limits.allowedHeartbeatTypes()}
+      />
     </main>
   );
 }
