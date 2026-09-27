@@ -232,7 +232,9 @@ export default async function PublicStatusPage({ params }: PageProps<"/s/[slug]"
                       {page.showUptime && (
                         <span className="text-sm tabular-nums">{percent(item.uptime.d90)}</span>
                       )}
-                      <span className={`shrink-0 text-right text-sm font-medium sm:w-28 ${word.tone}`}>
+                      <span
+                        className={`shrink-0 text-right text-sm font-medium sm:w-28 ${word.tone}`}
+                      >
                         {word.text}
                       </span>
                     </div>
