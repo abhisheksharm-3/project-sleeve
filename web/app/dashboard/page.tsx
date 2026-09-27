@@ -259,8 +259,9 @@ export default async function DashboardPage() {
                             {projectRate !== null && nextPause && ". "}
                             {nextPause && (
                               <>
-                                would pause in{" "}
-                                {bufferText(nextPause, now)?.replace(" before pause", "")}
+                                Would pause in{" "}
+                                {bufferText(nextPause, now)?.replace(" before pause", "")} if checks
+                                stopped
                               </>
                             )}
                           </p>
