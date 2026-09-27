@@ -3,7 +3,9 @@
 export type Alert = {
   alert_id: number;
   kind: "failing" | "pause_soon" | "paused";
-  email: string;
+  email: string | null;
+  webhook_kind: string | null;
+  webhook_url: string | null;
   project_name: string;
   url: string;
   platform: string;
@@ -12,7 +14,7 @@ export type Alert = {
   failures: number;
 };
 
-export type Email = { to: string; subject: string; text: string };
+export type Email = { to: string | null; subject: string; text: string };
 
 function span(ms: number): string {
   const hours = Math.max(0, Math.floor(ms / 3_600_000));
@@ -38,7 +40,7 @@ export function composeEmail(alert: Alert, siteUrl: string, now: number): Email 
   const name = shortName(alert.project_name);
   const left = alert.pause_at ? span(Date.parse(alert.pause_at) - now) : null;
   const footer =
-    `\n\nTarget: ${alert.url}\nDashboard: ${siteUrl}/dashboard\n\nTurn these emails off from the dashboard.`;
+    `\n\nTarget: ${alert.url}\nDashboard: ${siteUrl}/dashboard\n\nChange where these go from Notifications in your account menu.`;
 
   if (alert.kind === "failing") {
     return {

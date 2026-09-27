@@ -420,3 +420,7 @@ verify_jwt = false
 [functions.alerter]
 # Triggered by pg_cron with the same x-sleeve-cron shared secret as the pinger.
 verify_jwt = false
+
+[functions.digest]
+# Triggered weekly by pg_cron with the same x-sleeve-cron shared secret.
+verify_jwt = false

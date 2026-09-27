@@ -59,6 +59,12 @@ export async function AppHeader({ session }: { session: Session }) {
                 <span className="block truncate font-semibold">{name}</span>
               </p>
               <div className="border-t border-line pt-1.5">
+                <Link
+                  href="/notifications"
+                  className="block rounded-lg px-3 py-2 text-sm hover:bg-raised"
+                >
+                  Notifications
+                </Link>
                 <form action={signOut}>
                   <button
                     type="submit"

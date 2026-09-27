@@ -5,6 +5,8 @@ const base: Alert = {
   alert_id: 1,
   kind: "failing",
   email: "dev@example.com",
+  webhook_kind: null,
+  webhook_url: null,
   project_name: "abhisheksharm-3/biodocs",
   url: "https://xlivxxxyudbfbtsmemxp.supabase.co/rest/v1/rpc/keepalive",
   platform: "supabase",
