@@ -250,6 +250,39 @@ export default async function StatusPageEditor({
           </div>
         </form>
 
+        <section id="embed" className="mt-20 max-w-5xl scroll-mt-8">
+          <h2 className="text-xl font-semibold">Share and embed</h2>
+          <p className="mt-1 text-[15px] text-muted">
+            {page.published
+              ? "Copy any of these into a README or your own site. They update every few minutes."
+              : "These start working once the page is published."}
+          </p>
+          <div className="mt-6 grid gap-5 lg:grid-cols-2">
+            {[
+              {
+                title: "Status badge, for a README",
+                code: `[![Status](${address}/badge.svg)](${address})`,
+              },
+              {
+                title: "90-day bars, for a README",
+                code: `[![${page.title} status](${address}/bars.svg)](${address})`,
+              },
+              {
+                title: "Widget, for your own site",
+                code: `<iframe src="${address}/embed" title="${page.title} status" width="320" height="72" style="border:0"></iframe>`,
+              },
+              { title: "Link", code: address },
+            ].map((snippet) => (
+              <div key={snippet.title}>
+                <p className="mb-2 text-sm text-muted">{snippet.title}</p>
+                <pre className="overflow-x-auto rounded-xl border border-line bg-surface p-3 font-mono text-[13px] whitespace-pre-wrap break-all select-all">
+                  {snippet.code}
+                </pre>
+              </div>
+            ))}
+          </div>
+        </section>
+
         <section id="notices" className="mt-20 max-w-5xl scroll-mt-8">
           <h2 className="text-xl font-semibold">Notices</h2>
           <p className="mt-1 text-[15px] text-muted">

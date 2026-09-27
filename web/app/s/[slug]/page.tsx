@@ -16,6 +16,7 @@ import {
   type Overall,
   type StatusPageView,
 } from "@/lib/status-page";
+import { OVERALL_WORDS } from "@/lib/status-words";
 import { createClient } from "@/lib/supabase/server";
 import { span } from "@/lib/uptime";
 
@@ -36,16 +37,12 @@ export async function generateMetadata({ params }: PageProps<"/s/[slug]">): Prom
   };
 }
 
-const OVERALL: Record<Overall, { text: string; tone: string; window: string }> = {
-  up: { text: "Everything is up.", tone: "text-alive", window: "window-lit" },
-  degraded: {
-    text: "Mostly up. A backend failed its latest check.",
-    tone: "text-warn",
-    window: "window-lit flicker",
-  },
-  partial: { text: "Some of this is down.", tone: "text-dead", window: "bg-dead flicker" },
-  down: { text: "Everything here is down.", tone: "text-dead", window: "bg-dead" },
-  empty: { text: "Nothing is on this page yet.", tone: "text-muted", window: "window-dark" },
+const OVERALL_LOOK: Record<Overall, { tone: string; window: string }> = {
+  up: { tone: "text-alive", window: "window-lit" },
+  degraded: { tone: "text-warn", window: "window-lit flicker" },
+  partial: { tone: "text-dead", window: "bg-dead flicker" },
+  down: { tone: "text-dead", window: "bg-dead" },
+  empty: { tone: "text-muted", window: "window-dark" },
 };
 
 const STATE_WORD: Record<State, { text: string; tone: string }> = {
@@ -137,7 +134,7 @@ export default async function PublicStatusPage({ params }: PageProps<"/s/[slug]"
   const page = await load((await params).slug);
   if (!page) notFound();
   const now = Date.now();
-  const overall = OVERALL[page.overall];
+  const overall = { ...OVERALL_LOOK[page.overall], text: OVERALL_WORDS[page.overall].text };
   const open = page.notices.filter((n) => !n.resolved_at);
   const past = history(page, now);
   const uptime90 = mean(page.items.map((i) => i.uptime.d90));
