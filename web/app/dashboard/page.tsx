@@ -91,7 +91,7 @@ export default async function DashboardPage() {
   return (
     <>
       <header className="border-b border-line">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 px-6 py-3.5">
+        <div className="flex items-center gap-3 px-6 py-4 sm:px-10 lg:px-16">
           <span className="pulse size-2 rounded-full bg-alive" aria-hidden />
           <span className="font-mono text-sm tracking-tight">projectsleeve</span>
           <span className="ml-auto font-mono text-xs text-muted">
@@ -112,7 +112,7 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-10">
+      <main className="w-full flex-1 px-6 py-12 sm:px-10 lg:px-16">
         {projects.length === 0 ? (
           <div className="border border-line bg-surface px-6 py-10">
             <h1 className="text-lg font-medium">Nothing is being kept alive yet.</h1>

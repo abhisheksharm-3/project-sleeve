@@ -6,27 +6,28 @@ export const metadata = {
     "Free-tier backends pause after a week of quiet. ProjectSleeve pings the thing that actually pauses, on a schedule that cannot switch itself off.",
 };
 
-/** Static: no session lookup, so the page is prerendered. Signed-in visitors are sent to
- *  /dashboard by the proxy before they ever see it. */
+/** Full bleed: rules and sections run edge to edge, and only the reading measure is capped. */
+const PAD = "px-6 sm:px-10 lg:px-16";
+
 function Row({
   state,
   url,
   meta,
   right,
 }: {
-  state: "alive" | "dead" | "idle";
+  state: "alive" | "dead";
   url: string;
   meta: string;
   right: string;
 }) {
-  const dot = state === "alive" ? "bg-alive pulse" : state === "dead" ? "bg-dead" : "bg-muted";
+  const dot = state === "alive" ? "bg-alive pulse" : "bg-dead";
   return (
-    <li className="flex items-center gap-3 border-b border-line/60 px-4 py-2.5 last:border-b-0">
+    <li className="flex items-center gap-4 border-b border-line/60 px-4 py-3 last:border-b-0">
       <span className={`size-2 shrink-0 rounded-full ${dot}`} aria-hidden />
-      <span className="truncate font-mono text-xs">{url}</span>
-      <span className="ml-auto hidden shrink-0 font-mono text-xs text-muted sm:inline">{meta}</span>
+      <span className="truncate font-mono text-xs sm:text-sm">{url}</span>
+      <span className="ml-auto hidden shrink-0 font-mono text-xs text-muted md:inline">{meta}</span>
       <span
-        className={`w-24 shrink-0 text-right font-mono text-xs ${
+        className={`w-28 shrink-0 text-right font-mono text-xs ${
           state === "dead" ? "text-dead" : "text-muted"
         }`}
       >
@@ -39,34 +40,32 @@ function Row({
 export default function LandingPage() {
   return (
     <>
-      <header className="border-b border-line">
-        <div className="mx-auto flex max-w-4xl items-center gap-2.5 px-6 py-3.5">
-          <span className="pulse size-2 rounded-full bg-alive" aria-hidden />
-          <span className="font-mono text-sm tracking-tight">projectsleeve</span>
-          <Link
-            href="/login"
-            className="ml-auto font-mono text-xs text-muted transition-colors hover:text-text"
-          >
-            sign in
-          </Link>
-        </div>
+      <header className={`flex items-center gap-2.5 border-b border-line py-4 ${PAD}`}>
+        <span className="pulse size-2 rounded-full bg-alive" aria-hidden />
+        <span className="font-mono text-sm tracking-tight">projectsleeve</span>
+        <Link
+          href="/login"
+          className="ml-auto font-mono text-xs text-muted transition-colors hover:text-text"
+        >
+          sign in
+        </Link>
       </header>
 
-      <main className="mx-auto w-full max-w-4xl flex-1 px-6">
-        <section className="border-b border-line py-20">
-          <h1 className="max-w-2xl text-4xl leading-[1.1] font-medium sm:text-5xl">
+      <main className="flex-1">
+        <section className={`border-b border-line py-24 lg:py-36 ${PAD}`}>
+          <h1 className="max-w-5xl text-5xl leading-[1.05] font-medium sm:text-6xl lg:text-7xl">
             Your side project is asleep.
             <span className="block text-muted">You will find out from a user.</span>
           </h1>
-          <p className="mt-6 max-w-xl text-sm leading-relaxed text-muted">
+          <p className="mt-8 max-w-xl text-sm leading-relaxed text-muted">
             Supabase pauses a free project after about a week of inactivity. Render spins a free
             service down in fifteen minutes. The demo you linked on your CV returns a cold start, or
             nothing at all.
           </p>
-          <div className="mt-8 flex items-center gap-4">
+          <div className="mt-10 flex flex-wrap items-center gap-5">
             <Link
               href="/login"
-              className="border border-line bg-surface px-4 py-2.5 text-sm font-medium transition-colors hover:border-muted/40 hover:bg-raised"
+              className="border border-line bg-surface px-5 py-3 text-sm font-medium transition-colors hover:border-muted/40 hover:bg-raised"
             >
               Continue with GitHub
             </Link>
@@ -74,28 +73,28 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="border-b border-line py-16">
+        <section className={`border-b border-line py-20 ${PAD}`}>
           <h2 className="font-mono text-xs tracking-wide text-muted uppercase">
             Why the usual fixes fail
           </h2>
-          <dl className="mt-8 grid gap-8 sm:grid-cols-3">
+          <dl className="mt-10 grid gap-10 lg:grid-cols-3 lg:gap-16">
             <div>
-              <dt className="text-sm font-medium">A URL ping is not a heartbeat</dt>
-              <dd className="mt-2 text-sm leading-relaxed text-muted">
+              <dt className="text-base font-medium">A URL ping is not a heartbeat</dt>
+              <dd className="mt-3 max-w-md text-sm leading-relaxed text-muted">
                 Uptime monitors fetch your front page and report 100%. If the request never reaches
                 your database, the clock that pauses your project never resets.
               </dd>
             </div>
             <div>
-              <dt className="text-sm font-medium">A cron job on GitHub switches itself off</dt>
-              <dd className="mt-2 text-sm leading-relaxed text-muted">
+              <dt className="text-base font-medium">A cron job on GitHub switches itself off</dt>
+              <dd className="mt-3 max-w-md text-sm leading-relaxed text-muted">
                 GitHub disables scheduled workflows after 60 days without a commit. The dormant repo
                 is exactly the one whose keep-alive dies first, silently.
               </dd>
             </div>
             <div>
-              <dt className="text-sm font-medium">Nothing tells you it stopped</dt>
-              <dd className="mt-2 text-sm leading-relaxed text-muted">
+              <dt className="text-base font-medium">Nothing tells you it stopped</dt>
+              <dd className="mt-3 max-w-md text-sm leading-relaxed text-muted">
                 A failing ping and a paused project look identical from outside. We record every
                 outcome, so a pause is a measured event rather than a surprise.
               </dd>
@@ -103,15 +102,15 @@ export default function LandingPage() {
           </dl>
         </section>
 
-        <section className="border-b border-line py-16">
+        <section className={`border-b border-line py-20 ${PAD}`}>
           <h2 className="font-mono text-xs tracking-wide text-muted uppercase">
             What you actually see
           </h2>
-          <div className="mt-6 border border-line bg-surface">
+          <div className="mt-8 border border-line bg-surface">
             <ul>
               <Row
                 state="alive"
-                url="nujgeows.supabase.co/rest/v1/profiles"
+                url="nujgeowsnjculknvimbh.supabase.co/rest/v1/profiles?limit=1"
                 meta="supabase · db_query · every 6h"
                 right="200 · 2m ago"
               />
@@ -129,35 +128,33 @@ export default function LandingPage() {
               />
             </ul>
           </div>
-          <p className="mt-4 font-mono text-xs text-muted">
+          <p className="mt-5 font-mono text-xs text-muted">
             one row per target · status, latency and outcome only · never your data
           </p>
         </section>
 
-        <section className="py-16">
+        <section className={`py-20 ${PAD}`}>
           <h2 className="font-mono text-xs tracking-wide text-muted uppercase">
             One thing this cannot do
           </h2>
-          <p className="mt-6 max-w-xl text-sm leading-relaxed text-muted">
+          <p className="mt-8 max-w-xl text-sm leading-relaxed text-muted">
             Keep-alive prevents a pause. It cannot undo one. Supabase offers no API to resume a
             paused project, so if yours is already asleep, wake it in your dashboard first, then
             connect it here. We would rather say that now than after you sign up.
           </p>
           <Link
             href="/login"
-            className="mt-8 inline-block border border-line bg-surface px-4 py-2.5 text-sm font-medium transition-colors hover:border-muted/40 hover:bg-raised"
+            className="mt-10 inline-block border border-line bg-surface px-5 py-3 text-sm font-medium transition-colors hover:border-muted/40 hover:bg-raised"
           >
             Continue with GitHub
           </Link>
         </section>
       </main>
 
-      <footer className="border-t border-line">
-        <div className="mx-auto max-w-4xl px-6 py-6">
-          <p className="font-mono text-xs text-muted">
-            projectsleeve · status, latency and pause signals only
-          </p>
-        </div>
+      <footer className={`border-t border-line py-7 ${PAD}`}>
+        <p className="font-mono text-xs text-muted">
+          projectsleeve · status, latency and pause signals only
+        </p>
       </footer>
     </>
   );
