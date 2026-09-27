@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { createProject, importRepos } from "@/app/projects/actions";
+import { AppHeader } from "@/app/components/app-header";
+import { createProject } from "@/app/projects/actions";
 import { GitHubTokenMissing, listRepos, looksAbandoned, type Repo } from "@/lib/github";
 import { requireUser } from "@/lib/session";
+import { RepoPicker } from "./repo-picker";
 
 /** Pick-list of the user's public repos, plus a manual project for anything not on GitHub. */
 async function loadRepos(userId: string): Promise<{ repos: Repo[]; problem: string | null }> {
@@ -19,7 +21,8 @@ async function loadRepos(userId: string): Promise<{ repos: Repo[]; problem: stri
 }
 
 export default async function ImportPage({ searchParams }: PageProps<"/import">) {
-  const { supabase, user } = await requireUser();
+  const session = await requireUser();
+  const { supabase, user } = session;
   const { error } = await searchParams;
   const [{ repos, problem }, { data: existing }] = await Promise.all([
     loadRepos(user.id),
@@ -28,85 +31,65 @@ export default async function ImportPage({ searchParams }: PageProps<"/import">)
   const imported = new Set((existing ?? []).map((p) => p.github_id));
 
   return (
-    <main className="w-full flex-1 px-6 py-12 sm:px-10 lg:px-16">
-      <Link href="/dashboard" className="font-mono text-xs text-muted hover:text-text">
-        ← dashboard
-      </Link>
-      <h1 className="mt-6 text-2xl font-medium">Import repositories</h1>
-      <p className="mt-2 max-w-xl text-sm text-muted">
-        A repository becomes a project. It is not kept alive by itself: next you point a target at
-        the backend that actually pauses.
-      </p>
-
-      {(error || problem) && (
-        <p
-          role="alert"
-          className="mt-6 max-w-xl border border-dead/40 bg-dead/10 px-3 py-2 font-mono text-xs text-dead"
-        >
-          {error ?? problem}
+    <div className="flex min-h-full flex-1 flex-col bg-gradient-to-b from-sky to-ink">
+      <AppHeader session={session} />
+      <main className="w-full flex-1 px-6 pb-16 sm:px-10 lg:px-16">
+        <Link href="/dashboard" className="text-sm text-muted hover:text-text">
+          Back to all projects
+        </Link>
+        <h1 className="mt-6 text-4xl font-semibold sm:text-5xl">Add a project</h1>
+        <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
+          Pick the repositories to bring in. Each becomes a building on your dashboard; after that
+          you choose which backend inside it to keep awake.
         </p>
-      )}
 
-      {repos.length > 0 && (
-        <form action={importRepos} className="mt-8">
-          <ul className="border border-line bg-surface">
-            {repos.map((r) => {
-              const done = imported.has(r.github_id);
-              return (
-                <li key={r.github_id} className="border-b border-line/60 last:border-b-0">
-                  <label className="flex cursor-pointer items-center gap-4 px-4 py-3 has-[:disabled]:cursor-default has-[:disabled]:opacity-50">
-                    <input
-                      type="checkbox"
-                      name="repo"
-                      value={r.github_id}
-                      disabled={done}
-                      className="accent-alive"
-                    />
-                    <span className="truncate font-mono text-sm">{r.name}</span>
-                    {looksAbandoned(r.last_commit_at) && !done && (
-                      <span className="shrink-0 border border-warn/40 px-1.5 font-mono text-[11px] text-warn">
-                        quiet 60d+ · likely to pause
-                      </span>
-                    )}
-                    <span className="ml-auto shrink-0 font-mono text-xs text-muted">
-                      {done ? "imported" : (r.language ?? "")}
-                    </span>
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
-          <button
-            type="submit"
-            className="mt-5 border border-line bg-surface px-5 py-2.5 text-sm font-medium hover:bg-raised"
+        {(error || problem) && (
+          <p
+            role="alert"
+            className="mt-8 max-w-2xl rounded-xl border border-dead/40 bg-dead/10 px-4 py-3 text-[15px] text-dead"
           >
-            Import selected
-          </button>
-        </form>
-      )}
+            {error ?? problem}
+          </p>
+        )}
 
-      <form action={createProject} className="mt-12 max-w-xl border-t border-line pt-8">
-        <h2 className="font-mono text-xs tracking-wide text-muted uppercase">Or add one by hand</h2>
-        <div className="mt-4 flex gap-3">
-          <label className="sr-only" htmlFor="name">
-            Project name
-          </label>
-          <input
-            id="name"
-            name="name"
-            required
-            maxLength={100}
-            placeholder="my-side-project"
-            className="flex-1 border border-line bg-ink px-3 py-2 font-mono text-sm placeholder:text-muted/60"
+        {repos.length > 0 && (
+          <RepoPicker
+            repos={repos.map((r) => ({
+              github_id: r.github_id,
+              name: r.name,
+              language: r.language,
+              imported: imported.has(r.github_id),
+              quiet: looksAbandoned(r.last_commit_at),
+            }))}
           />
-          <button
-            type="submit"
-            className="border border-line bg-surface px-4 py-2 text-sm font-medium hover:bg-raised"
-          >
-            Create
-          </button>
-        </div>
-      </form>
-    </main>
+        )}
+
+        <form action={createProject} className="mt-16 max-w-xl border-t border-line pt-10">
+          <h2 className="text-xl font-semibold">Not on GitHub?</h2>
+          <p className="mt-1 text-[15px] text-muted">
+            Name the project and add its backends by hand.
+          </p>
+          <div className="mt-5 flex gap-3">
+            <label className="sr-only" htmlFor="name">
+              Project name
+            </label>
+            <input
+              id="name"
+              name="name"
+              required
+              maxLength={100}
+              placeholder="my-side-project"
+              className="flex-1 rounded-xl border border-line bg-ink px-4 py-2.5 text-[15px] placeholder:text-muted/50 focus:border-alive/60 focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold hover:border-alive/60 hover:text-alive"
+            >
+              Create project
+            </button>
+          </div>
+        </form>
+      </main>
+    </div>
   );
 }

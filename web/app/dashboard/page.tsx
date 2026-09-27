@@ -1,49 +1,55 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { type RowTarget, TargetRow } from "@/app/components/target-row";
+import { AppHeader } from "@/app/components/app-header";
+import { Window } from "@/app/components/window";
+import { PLATFORM_NAMES, statusOf, targetTitle } from "@/lib/describe";
 import { entitlements } from "@/lib/entitlements";
 import { ago } from "@/lib/format";
-import { stateOf } from "@/lib/health";
+import { bufferText, type Health, type State } from "@/lib/health";
 import { loadHealth } from "@/lib/load-health";
 import { requireUser } from "@/lib/session";
-import { createClient } from "@/lib/supabase/server";
 
-/** Every project and target the user owns, worst news first in the summary line. */
+/** The skyline: every project a building, every backend a window, the night's totals above. */
+type Target = {
+  id: string;
+  url: string;
+  platform: string;
+  heartbeat_type: string;
+  interval_seconds: number;
+};
 type Project = {
   id: string;
   name: string;
   language: string | null;
   last_commit_at: string | null;
-  targets: RowTarget[];
+  targets: Target[];
 };
 
-async function signOut() {
-  "use server";
-  const supabase = await createClient();
-  await supabase.auth.signOut();
-  redirect("/login");
+const TROUBLE: State[] = ["failing", "paused", "pause_soon"];
+const RANK: Record<State, number> = { paused: 0, failing: 1, pause_soon: 2, idle: 3, alive: 4 };
+
+/** Checks passed across targets, weighted by how many each ran, so a new target cannot skew it. */
+function passRate(rows: Health[]): number | null {
+  const pings = rows.reduce((n, h) => n + h.pings_7d, 0);
+  if (!pings) return null;
+  const ok = rows.reduce((n, h) => n + ((h.uptime_7d ?? 0) / 100) * h.pings_7d, 0);
+  return Math.round((ok / pings) * 1000) / 10;
 }
 
-/** RLS limits the update to the caller's own profile row. */
-async function setAlerts(formData: FormData) {
-  "use server";
-  const { supabase, user } = await requireUser();
-  await supabase
-    .from("profiles")
-    .update({ alerts_enabled: formData.get("enabled") === "true" })
-    .eq("id", user.id);
-  redirect("/dashboard");
+function splitName(name: string) {
+  const [owner, repo] = name.includes("/") ? name.split("/") : ["", name];
+  return { owner, repo };
+}
+
+function headline(total: number, trouble: number) {
+  if (total === 0) return "No lights on yet.";
+  if (trouble === 0) return total === 1 ? "The light is on." : `All ${total} lights are on.`;
+  return `${trouble} of ${total} lights ${trouble === 1 ? "is" : "are"} flickering.`;
 }
 
 export default async function DashboardPage() {
-  const { supabase, user } = await requireUser();
-
-  const [{ data: profile }, { data: projectRows }, limits] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("github_username, alerts_enabled")
-      .eq("id", user.id)
-      .maybeSingle(),
+  const session = await requireUser();
+  const { supabase, user } = session;
+  const [{ data: projectRows }, limits] = await Promise.all([
     supabase
       .from("projects")
       .select(
@@ -56,118 +62,182 @@ export default async function DashboardPage() {
 
   const projects = (projectRows ?? []) as Project[];
   const targets = projects.flatMap((p) => p.targets ?? []);
-  const { health, days } = await loadHealth(
+  const { health } = await loadHealth(
     supabase,
     targets.map((t) => t.id),
   );
   const now = Date.now();
-  const states = targets.map((t) => stateOf(health.get(t.id), now));
-  const trouble = states.filter((s) => s === "failing" || s === "paused").length;
-  const soon = states.filter((s) => s === "pause_soon").length;
-  const alertsOn = profile?.alerts_enabled ?? true;
+  const status = new Map(targets.map((t) => [t.id, statusOf(t, health.get(t.id), now)]));
+  const trouble = targets.filter((t) => TROUBLE.includes(status.get(t.id)?.state ?? "idle"));
+  const rate = passRate([...health.values()]);
+  const nearest = targets
+    .filter((t) => Date.parse(health.get(t.id)?.pause_at ?? "") > now)
+    .sort(
+      (a, b) =>
+        Date.parse(health.get(a.id)?.pause_at ?? "") - Date.parse(health.get(b.id)?.pause_at ?? ""),
+    )[0];
+  const nearestProject =
+    nearest && projects.find((p) => p.targets.some((t) => t.id === nearest.id));
+
+  const byPlatform = new Map<string, Health[]>();
+  for (const t of targets) {
+    const h = health.get(t.id);
+    if (h) byPlatform.set(t.platform, [...(byPlatform.get(t.platform) ?? []), h]);
+  }
 
   return (
-    <>
-      <header className="border-b border-line">
-        <div className="flex items-center gap-4 px-6 py-4 sm:px-10 lg:px-16">
-          <span className="pulse size-2 rounded-full bg-alive" aria-hidden />
-          <span className="font-mono text-sm tracking-tight">projectsleeve</span>
-          <span className="ml-auto hidden font-mono text-xs text-muted sm:inline">
-            {limits.planName} · {projects.length}/{limits.limits.max_projects} projects ·{" "}
-            {targets.length}/{limits.limits.max_targets} targets
-          </span>
-          <Link href="/import" className="font-mono text-xs text-muted hover:text-text">
-            + project
-          </Link>
-          <form action={setAlerts}>
-            <input type="hidden" name="enabled" value={String(!alertsOn)} />
-            <button type="submit" className="font-mono text-xs text-muted hover:text-text">
-              alerts {alertsOn ? "on" : "off"}
-            </button>
-          </form>
-          {profile?.github_username && (
-            <span className="font-mono text-xs text-muted">{profile.github_username}</span>
-          )}
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="font-mono text-xs text-muted transition-colors hover:text-text"
-            >
-              sign out
-            </button>
-          </form>
-        </div>
-      </header>
-
-      <main className="w-full flex-1 px-6 py-12 sm:px-10 lg:px-16">
-        {projects.length === 0 ? (
-          <div className="border border-line bg-surface px-6 py-10">
-            <h1 className="text-lg font-medium">Nothing is being kept alive yet.</h1>
-            <p className="mt-2 max-w-lg text-sm leading-relaxed text-muted">
-              Import a repository to create a project, then point a target at the thing that
-              actually pauses — usually your database, not the site in front of it.
-            </p>
+    <div className="flex min-h-full flex-1 flex-col bg-gradient-to-b from-sky to-ink">
+      <AppHeader session={session} />
+      <main className="w-full flex-1 px-6 pb-16 sm:px-10 lg:px-16">
+        <section className="flex flex-wrap items-end justify-between gap-6 pt-10">
+          <div className="max-w-3xl">
+            <h1 className="text-4xl font-semibold sm:text-5xl">
+              {headline(targets.length, trouble.length)}
+            </h1>
+            <div className="mt-5 space-y-1.5 text-[15px] leading-relaxed text-muted">
+              {rate !== null && (
+                <p>
+                  <span className="text-text">{rate}%</span> of checks passed across your{" "}
+                  {projects.length} projects this week.
+                </p>
+              )}
+              {nearest && nearestProject && (
+                <p>
+                  If checks stopped, the first to pause would be{" "}
+                  {splitName(nearestProject.name).repo}&apos;s {targetTitle(nearest).title}, in{" "}
+                  <span className="text-text">
+                    {bufferText(health.get(nearest.id), now)?.replace(" before pause", "")}
+                  </span>
+                  .
+                </p>
+              )}
+              {byPlatform.size > 1 && (
+                <p>
+                  {[...byPlatform]
+                    .map(
+                      ([p, rows]) =>
+                        `${PLATFORM_NAMES[p] ?? p}: ${rows.length} ${rows.length === 1 ? "backend" : "backends"}, ${passRate(rows) ?? 0}% of checks passed`,
+                    )
+                    .join(". ")}
+                  .
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-5">
+            <span className="text-sm text-muted">
+              {targets.length} of {limits.limits.max_targets} backends on {limits.planName}
+            </span>
             <Link
               href="/import"
-              className="mt-6 inline-block border border-line bg-raised px-4 py-2 text-sm font-medium hover:border-muted/40"
+              className="rounded-full bg-alive px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-warn"
             >
-              Import a repository
+              Add a project
             </Link>
           </div>
-        ) : (
-          <>
-            <p
-              role="status"
-              className={`mb-10 font-mono text-sm ${trouble ? "text-dead" : soon ? "text-warn" : "text-muted"}`}
-            >
-              {trouble
-                ? `${trouble} target${trouble > 1 ? "s" : ""} need${trouble > 1 ? "" : "s"} attention.`
-                : soon
-                  ? `${soon} target${soon > 1 ? "s" : ""} could pause within 48 hours.`
-                  : `All ${targets.length} targets are alive.`}
-              {!alertsOn && " Alert email is off."}
+        </section>
+
+        {trouble.length > 0 && (
+          <section className="mt-10 rounded-2xl border border-dead/40 bg-dead/10 p-5">
+            <h2 className="text-base font-semibold text-dead">Needs you</h2>
+            <ul className="mt-3 space-y-2">
+              {trouble.map((t) => {
+                const s = status.get(t.id);
+                const p = projects.find((pr) => pr.targets.some((x) => x.id === t.id));
+                return (
+                  <li key={t.id} className="text-[15px]">
+                    <Link href={`/projects/${p?.id}`} className="font-medium hover:text-alive">
+                      {p ? `${splitName(p.name).repo}'s ` : ""}
+                      {targetTitle(t).title}
+                    </Link>
+                    <span className="text-muted">: {s?.sentence}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        {projects.length === 0 ? (
+          <section className="mt-16 max-w-xl">
+            <p className="text-lg leading-relaxed text-muted">
+              Import a repository to put up your first building, then tell us which backend to keep
+              lit. That is usually the database, not the website in front of it.
             </p>
-            <div className="space-y-10">
-              {projects.map((project) => (
-                <section key={project.id}>
-                  <div className="flex items-baseline gap-3 border-b border-line pb-2">
-                    <h2 className="text-sm font-medium">
-                      <Link href={`/projects/${project.id}`} className="hover:text-accent">
-                        {project.name}
-                      </Link>
-                    </h2>
-                    {project.language && (
-                      <span className="font-mono text-xs text-muted">{project.language}</span>
-                    )}
-                    {project.last_commit_at && (
-                      <span className="ml-auto font-mono text-xs text-muted">
-                        last commit {ago(project.last_commit_at)}
+          </section>
+        ) : (
+          <section aria-label="Projects" className="mt-14">
+            <div className="flex flex-wrap items-end gap-x-5 gap-y-10 border-b-2 border-line pb-0">
+              {projects.map((project) => {
+                const { owner, repo } = splitName(project.name);
+                const list = [...(project.targets ?? [])].sort(
+                  (a, b) =>
+                    RANK[status.get(a.id)?.state ?? "idle"] -
+                    RANK[status.get(b.id)?.state ?? "idle"],
+                );
+                const worst = list[0] ? status.get(list[0].id) : undefined;
+                return (
+                  <Link
+                    key={project.id}
+                    href={`/projects/${project.id}`}
+                    className="group relative w-full rounded-t-xl border border-b-0 border-line bg-surface px-5 pt-5 pb-6 transition-colors hover:border-alive/50 sm:w-[300px]"
+                    style={{ minHeight: `${150 + list.length * 46}px` }}
+                  >
+                    <span
+                      aria-hidden
+                      className="absolute -top-2.5 right-8 h-2.5 w-10 rounded-t-sm border border-b-0 border-line bg-surface"
+                    />
+                    <div className="flex items-baseline justify-between gap-2">
+                      <h2 className="truncate text-lg font-semibold group-hover:text-alive">
+                        {repo}
+                      </h2>
+                      <span className="shrink-0 text-xs text-muted">
+                        {project.last_commit_at
+                          ? `touched ${ago(project.last_commit_at, now)}`
+                          : project.language}
                       </span>
+                    </div>
+                    {owner && <p className="text-xs text-muted">{owner}</p>}
+                    {list.length === 0 ? (
+                      <div className="mt-6">
+                        <div className="flex gap-2">
+                          <span className="window-dark h-6 w-[18px] rounded-[3px]" />
+                          <span className="window-dark h-6 w-[18px] rounded-[3px]" />
+                        </div>
+                        <p className="mt-3 text-sm text-warn">
+                          No lights yet. Add the backend to keep awake.
+                        </p>
+                      </div>
+                    ) : (
+                      <ul className="mt-5 space-y-3">
+                        {list.map((t) => {
+                          const s = status.get(t.id);
+                          return (
+                            <li key={t.id} className="flex items-center gap-3">
+                              <Window state={s?.state ?? "idle"} />
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm">
+                                  {targetTitle(t).title}
+                                </span>
+                                <span className="block truncate text-xs text-muted">
+                                  {s?.headline}
+                                </span>
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
                     )}
-                  </div>
-                  {(project.targets ?? []).length === 0 ? (
-                    <p className="px-1 py-4 font-mono text-xs text-muted">
-                      no targets — nothing here is being kept alive
-                    </p>
-                  ) : (
-                    <ul>
-                      {project.targets.map((t) => (
-                        <TargetRow
-                          key={t.id}
-                          target={t}
-                          health={health.get(t.id)}
-                          days={days.get(t.id) ?? []}
-                          now={now}
-                        />
-                      ))}
-                    </ul>
-                  )}
-                </section>
-              ))}
+                    {worst && TROUBLE.includes(worst.state) && (
+                      <p className="mt-4 text-xs text-dead">{worst.sentence}</p>
+                    )}
+                  </Link>
+                );
+              })}
             </div>
-          </>
+          </section>
         )}
       </main>
-    </>
+    </div>
   );
 }

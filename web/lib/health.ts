@@ -20,7 +20,7 @@ const DAY_S = 86_400;
 
 /**
  * Worst condition wins: a project past its pause deadline is paused even if the latest ping
- * failed for another reason. Mirrors alert_conditions in SQL, so the badge and the email agree.
+ * failed for another reason. Mirrors alert_conditions in SQL, so the badge and the alert agree.
  */
 export function stateOf(h: Health | undefined, now = Date.now()): State {
   if (!h?.last_ping_at) return "idle";

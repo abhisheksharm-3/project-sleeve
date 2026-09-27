@@ -1,161 +1,150 @@
 import Link from "next/link";
+import { Skyline } from "@/app/components/skyline";
+import { Window } from "@/app/components/window";
 
 export const metadata = {
-  title: "ProjectSleeve — keep-alive that actually works",
+  title: "ProjectSleeve — keeping the lights on",
   description:
-    "Free-tier backends pause after a week of quiet. ProjectSleeve pings the thing that actually pauses, on a schedule that cannot switch itself off.",
+    "Free-tier backends pause when nobody touches them. ProjectSleeve checks each one the way its platform actually counts, on a schedule that never switches itself off.",
 };
 
-/** Full bleed: rules and sections run edge to edge, and only the reading measure is capped. */
+/** Static and prerendered; the proxy sends signed-in visitors to their dashboard instead. */
 const PAD = "px-6 sm:px-10 lg:px-16";
 
-function Row({
-  state,
-  url,
-  meta,
-  right,
-}: {
-  state: "alive" | "dead";
-  url: string;
-  meta: string;
-  right: string;
-}) {
-  const dot = state === "alive" ? "bg-alive pulse" : "bg-dead";
-  return (
-    <li className="flex items-center gap-4 border-b border-line/60 px-4 py-3 last:border-b-0">
-      <span className={`size-2 shrink-0 rounded-full ${dot}`} aria-hidden />
-      <span className="truncate font-mono text-xs sm:text-sm">{url}</span>
-      <span className="ml-auto hidden shrink-0 font-mono text-xs text-muted md:inline">{meta}</span>
-      <span
-        className={`w-28 shrink-0 text-right font-mono text-xs ${
-          state === "dead" ? "text-dead" : "text-muted"
-        }`}
-      >
-        {right}
-      </span>
-    </li>
-  );
-}
+const REASONS = [
+  {
+    state: "paused" as const,
+    title: "A page visit is not database activity",
+    body: "Uptime monitors load your homepage and report 100%. Supabase counts queries, not visits, so the project pauses anyway.",
+  },
+  {
+    state: "failing" as const,
+    title: "Scheduled GitHub Actions switch themselves off",
+    body: "GitHub disables scheduled workflows after 60 days without a commit. The quiet repository is exactly the one whose keep-alive stops first.",
+  },
+  {
+    state: "idle" as const,
+    title: "Nobody tells you it stopped",
+    body: "A failing check and a paused project look the same from outside. We record every check, so your dashboard shows the problem days before the deadline.",
+  },
+];
+
+const LEGEND = [
+  {
+    state: "alive" as const,
+    name: "Lit",
+    body: "The last check succeeded, and we know how long until the platform would pause it.",
+  },
+  {
+    state: "failing" as const,
+    name: "Flickering",
+    body: "Checks are failing, or the pause deadline is less than two days away.",
+  },
+  {
+    state: "paused" as const,
+    name: "Dark",
+    body: "The pause window passed without a successful check. Restore it on the platform and we take over again.",
+  },
+];
 
 export default function LandingPage() {
   return (
-    <>
-      <header className={`flex items-center gap-2.5 border-b border-line py-4 ${PAD}`}>
-        <span className="pulse size-2 rounded-full bg-alive" aria-hidden />
-        <span className="font-mono text-sm tracking-tight">projectsleeve</span>
+    <div className="flex min-h-full flex-1 flex-col bg-gradient-to-b from-sky via-ink to-ink">
+      <header className={`flex items-center gap-2.5 py-5 ${PAD}`}>
+        <Window state="alive" size="sm" />
+        <span className="text-[15px] font-semibold tracking-tight">ProjectSleeve</span>
         <Link
           href="/login"
-          className="ml-auto font-mono text-xs text-muted transition-colors hover:text-text"
+          className="ml-auto text-sm text-muted transition-colors hover:text-text"
         >
-          sign in
+          Sign in
         </Link>
       </header>
 
       <main className="flex-1">
-        <section className={`border-b border-line py-24 lg:py-36 ${PAD}`}>
-          <h1 className="max-w-5xl text-5xl leading-[1.05] font-medium sm:text-6xl lg:text-7xl">
-            Your side project is asleep.
-            <span className="block text-muted">You will find out from a user.</span>
+        <section className={`pt-16 sm:pt-24 ${PAD}`}>
+          <h1 className="max-w-4xl text-5xl leading-[1.02] font-semibold sm:text-7xl">
+            Keeping the lights on for the projects you are not touching.
           </h1>
-          <p className="mt-8 max-w-xl text-sm leading-relaxed text-muted">
-            Supabase pauses a free project after about a week of inactivity. Render spins a free
-            service down in fifteen minutes. The demo you linked on your CV returns a cold start, or
-            nothing at all.
+          <p className="mt-8 max-w-xl text-lg leading-relaxed text-muted">
+            Supabase pauses a free project after a week of quiet. Render sleeps after fifteen
+            minutes. We check each backend the way its platform actually counts, on a schedule that
+            never switches itself off.
           </p>
           <div className="mt-10 flex flex-wrap items-center gap-5">
             <Link
               href="/login"
-              className="border border-line bg-surface px-5 py-3 text-sm font-medium transition-colors hover:border-muted/40 hover:bg-raised"
+              className="rounded-full bg-alive px-6 py-3 text-[15px] font-semibold text-ink transition-colors hover:bg-warn"
             >
               Continue with GitHub
             </Link>
-            <span className="font-mono text-xs text-muted">read:user · free tier</span>
+            <span className="text-sm text-muted">
+              Reads your public repositories. Never your code.
+            </span>
+          </div>
+          <div className="mt-20 border-b-2 border-line">
+            <Skyline />
           </div>
         </section>
 
-        <section className={`border-b border-line py-20 ${PAD}`}>
-          <h2 className="font-mono text-xs tracking-wide text-muted uppercase">
-            Why the usual fixes fail
+        <section className={`py-24 ${PAD}`}>
+          <h2 className="max-w-2xl text-3xl font-semibold sm:text-4xl">
+            Why the lights go out anyway
           </h2>
-          <dl className="mt-10 grid gap-10 lg:grid-cols-3 lg:gap-16">
-            <div>
-              <dt className="text-base font-medium">A URL ping is not a heartbeat</dt>
-              <dd className="mt-3 max-w-md text-sm leading-relaxed text-muted">
-                Uptime monitors fetch your front page and report 100%. If the request never reaches
-                your database, the clock that pauses your project never resets.
-              </dd>
-            </div>
-            <div>
-              <dt className="text-base font-medium">A cron job on GitHub switches itself off</dt>
-              <dd className="mt-3 max-w-md text-sm leading-relaxed text-muted">
-                GitHub disables scheduled workflows after 60 days without a commit. The dormant repo
-                is exactly the one whose keep-alive dies first, silently.
-              </dd>
-            </div>
-            <div>
-              <dt className="text-base font-medium">Nothing tells you it stopped</dt>
-              <dd className="mt-3 max-w-md text-sm leading-relaxed text-muted">
-                A failing ping and a paused project look identical from outside. We record every
-                outcome, so a pause is a measured event rather than a surprise.
-              </dd>
-            </div>
+          <ul className="mt-12 grid gap-12 lg:grid-cols-3">
+            {REASONS.map((r) => (
+              <li key={r.title} className="flex gap-4">
+                <Window state={r.state} size="lg" />
+                <div>
+                  <h3 className="text-lg font-semibold">{r.title}</h3>
+                  <p className="mt-2 text-[15px] leading-relaxed text-muted">{r.body}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className={`border-t border-line py-24 ${PAD}`}>
+          <h2 className="max-w-2xl text-3xl font-semibold sm:text-4xl">
+            Every backend is a window
+          </h2>
+          <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-muted">
+            Each project you import is a building. Each database, service or Space inside it is a
+            window, and you can read the whole night at a glance.
+          </p>
+          <dl className="mt-12 grid gap-10 sm:grid-cols-3">
+            {LEGEND.map((l) => (
+              <div key={l.name}>
+                <dt className="flex items-center gap-3 text-lg font-semibold">
+                  <Window state={l.state} />
+                  {l.name}
+                </dt>
+                <dd className="mt-2 text-[15px] leading-relaxed text-muted">{l.body}</dd>
+              </div>
+            ))}
           </dl>
         </section>
 
-        <section className={`border-b border-line py-20 ${PAD}`}>
-          <h2 className="font-mono text-xs tracking-wide text-muted uppercase">
-            What you actually see
-          </h2>
-          <div className="mt-8 border border-line bg-surface">
-            <ul>
-              <Row
-                state="alive"
-                url="nujgeowsnjculknvimbh.supabase.co/rest/v1/profiles?limit=1"
-                meta="supabase · db_query · every 6h"
-                right="200 · 2m ago"
-              />
-              <Row
-                state="alive"
-                url="inquora.vercel.app/"
-                meta="custom · plain · every 6h"
-                right="200 · 2m ago"
-              />
-              <Row
-                state="dead"
-                url="old-demo.onrender.com/health"
-                meta="render · plain · every 10m"
-                right="503 · 1m ago"
-              />
-            </ul>
-          </div>
-          <p className="mt-5 font-mono text-xs text-muted">
-            one row per target · status, latency and outcome only · never your data
-          </p>
-        </section>
-
-        <section className={`py-20 ${PAD}`}>
-          <h2 className="font-mono text-xs tracking-wide text-muted uppercase">
-            One thing this cannot do
-          </h2>
-          <p className="mt-8 max-w-xl text-sm leading-relaxed text-muted">
-            Keep-alive prevents a pause. It cannot undo one. Supabase offers no API to resume a
-            paused project, so if yours is already asleep, wake it in your dashboard first, then
-            connect it here. We would rather say that now than after you sign up.
+        <section className={`border-t border-line py-24 ${PAD}`}>
+          <h2 className="max-w-2xl text-3xl font-semibold sm:text-4xl">What we cannot do</h2>
+          <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-muted">
+            We keep a light on; we cannot switch one back on. Supabase has no way to resume a paused
+            project from outside, so if yours is already asleep, restore it in your dashboard first.
+            From then on, it stays lit.
           </p>
           <Link
             href="/login"
-            className="mt-10 inline-block border border-line bg-surface px-5 py-3 text-sm font-medium transition-colors hover:border-muted/40 hover:bg-raised"
+            className="mt-10 inline-block rounded-full bg-alive px-6 py-3 text-[15px] font-semibold text-ink transition-colors hover:bg-warn"
           >
             Continue with GitHub
           </Link>
         </section>
       </main>
 
-      <footer className={`border-t border-line py-7 ${PAD}`}>
-        <p className="font-mono text-xs text-muted">
-          projectsleeve · status, latency and pause signals only
-        </p>
+      <footer className={`border-t border-line py-8 text-sm text-muted ${PAD}`}>
+        We store the status, timing and outcome of each check. Never your data, and never a response
+        body.
       </footer>
-    </>
+    </div>
   );
 }

@@ -1,4 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Skyline } from "@/app/components/skyline";
+import { Window } from "@/app/components/window";
 import { siteUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 
@@ -32,42 +35,46 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const { error } = await searchParams;
 
   return (
-    <main className="flex-1 grid place-items-center px-6">
-      <div className="w-full max-w-sm">
-        <div className="flex items-center gap-2.5 mb-10">
-          <span className="pulse size-2 rounded-full bg-alive" aria-hidden />
-          <span className="font-mono text-sm tracking-tight">projectsleeve</span>
-        </div>
-
-        <h1 className="text-2xl font-medium mb-3">Your side projects stop pausing.</h1>
-        <p className="text-muted text-sm leading-relaxed mb-8">
-          Free-tier backends sleep after a week of quiet. ProjectSleeve pings them in a way that
-          resets the clock that actually matters, on a schedule that cannot switch itself off.
-        </p>
-
-        {error && (
-          <p
-            role="alert"
-            className="mb-6 border border-dead/40 bg-dead/10 px-3 py-2 font-mono text-xs text-dead"
-          >
-            {error}
+    <div className="flex min-h-full flex-1 flex-col bg-gradient-to-b from-sky to-ink">
+      <main className="grid flex-1 items-center gap-16 px-6 py-16 sm:px-10 lg:grid-cols-[28rem_minmax(0,1fr)] lg:px-16">
+        <div>
+          <Link href="/" className="flex items-center gap-2.5">
+            <Window state="alive" size="sm" />
+            <span className="text-[15px] font-semibold tracking-tight">ProjectSleeve</span>
+          </Link>
+          <h1 className="mt-12 text-4xl leading-tight font-semibold">
+            Sign in and leave the lights to us.
+          </h1>
+          <p className="mt-4 text-[15px] leading-relaxed text-muted">
+            We import your repositories as projects. You tell us which backend each one depends on,
+            and we keep it awake.
           </p>
-        )}
 
-        <form action={signInWithGitHub}>
-          <button
-            type="submit"
-            className="w-full border border-line bg-surface px-4 py-2.5 text-sm font-medium
-                       hover:bg-raised hover:border-muted/40 transition-colors"
-          >
-            Continue with GitHub
-          </button>
-        </form>
+          {error && (
+            <p
+              role="alert"
+              className="mt-6 rounded-xl border border-dead/40 bg-dead/10 px-4 py-3 text-sm text-dead"
+            >
+              {error}
+            </p>
+          )}
 
-        <p className="mt-4 font-mono text-[11px] leading-relaxed text-muted">
-          read:user only. We never ask for access to your code.
-        </p>
-      </div>
-    </main>
+          <form action={signInWithGitHub} className="mt-10">
+            <button
+              type="submit"
+              className="w-full rounded-full bg-alive px-6 py-3 text-[15px] font-semibold text-ink transition-colors hover:bg-warn"
+            >
+              Continue with GitHub
+            </button>
+          </form>
+          <p className="mt-4 text-sm text-muted">
+            We ask for your public profile only. We never read your code.
+          </p>
+        </div>
+        <div className="hidden min-w-0 overflow-hidden border-b-2 border-line lg:block">
+          <Skyline />
+        </div>
+      </main>
+    </div>
   );
 }

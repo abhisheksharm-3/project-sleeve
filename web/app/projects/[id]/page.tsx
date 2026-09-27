@@ -1,13 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { TargetRow } from "@/app/components/target-row";
+import { AppHeader } from "@/app/components/app-header";
+import { TargetCard } from "@/app/components/target-card";
+import { Window } from "@/app/components/window";
 import { removeTarget, testTarget } from "@/app/projects/actions";
+import { statusOf } from "@/lib/describe";
 import { entitlements } from "@/lib/entitlements";
 import { loadHealth } from "@/lib/load-health";
 import { requireUser } from "@/lib/session";
-import { TargetForms } from "./target-forms";
+import { AddTarget } from "./target-forms";
 
-/** One project: its targets, their last outcome, and the forms to add more. */
+/** One project: the backends kept awake, and a two-step way to add another. */
 type Target = {
   id: string;
   url: string;
@@ -17,7 +20,10 @@ type Target = {
   secret: string | null;
 };
 
-/** The route a user drops into their own app so a db_query ping runs a real query. */
+const ROW_ACTION =
+  "rounded-full border border-line px-4 py-1.5 text-sm transition-colors hover:border-alive/60 hover:text-alive";
+
+/** The route a user drops into their own app so a db_query check runs a real query. */
 function Snippet({ secret }: { secret: string }) {
   const code = `// app/api/keepalive/route.ts
 import { createClient } from "@supabase/supabase-js";
@@ -49,8 +55,9 @@ export async function GET(req: Request) {
 
 export default async function ProjectPage({ params, searchParams }: PageProps<"/projects/[id]">) {
   const { id } = await params;
-  const { error, added, queued } = await searchParams;
-  const { supabase, user } = await requireUser();
+  const { error, added, queued, add } = await searchParams;
+  const session = await requireUser();
+  const { supabase, user } = session;
 
   const { data: project } = await supabase
     .from("projects")
@@ -62,87 +69,121 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
   if (!project) notFound();
 
   const targets = (project.targets ?? []) as Target[];
-  const limits = await entitlements(user.id);
-  const { health, days } = await loadHealth(
-    supabase,
-    targets.map((t) => t.id),
-  );
+  const [limits, { health, days }] = await Promise.all([
+    entitlements(user.id),
+    loadHealth(
+      supabase,
+      targets.map((t) => t.id),
+    ),
+  ]);
   const now = Date.now();
   const newTarget = targets.find((t) => t.id === added);
+  const [owner, repo] = project.name.includes("/") ? project.name.split("/") : ["", project.name];
 
   return (
-    <main className="w-full flex-1 px-6 py-12 sm:px-10 lg:px-16">
-      <Link href="/dashboard" className="font-mono text-xs text-muted hover:text-text">
-        ← dashboard
-      </Link>
-      <div className="mt-6 flex items-baseline gap-4">
-        <h1 className="text-2xl font-medium">{project.name}</h1>
-        {project.repo_url && (
-          <a href={project.repo_url} className="font-mono text-xs text-muted hover:text-text">
-            github ↗
-          </a>
-        )}
-      </div>
+    <div className="flex min-h-full flex-1 flex-col bg-gradient-to-b from-sky to-ink">
+      <AppHeader session={session} />
+      <main className="w-full flex-1 px-6 pb-16 sm:px-10 lg:px-16">
+        <Link href="/dashboard" className="text-sm text-muted hover:text-text">
+          Back to all projects
+        </Link>
+        <section className="mt-6 flex flex-wrap items-end justify-between gap-6">
+          <div>
+            <h1 className="text-4xl font-semibold sm:text-5xl">{repo}</h1>
+            <p className="mt-2 text-[15px] text-muted">
+              {owner}
+              {owner && project.repo_url && ". "}
+              {project.repo_url && (
+                <a
+                  href={project.repo_url}
+                  className="underline decoration-line underline-offset-4 hover:text-text"
+                >
+                  View the repository on GitHub
+                </a>
+              )}
+            </p>
+          </div>
+          {targets.length > 0 && (
+            <div
+              aria-hidden
+              className="flex gap-2 rounded-t-xl border border-b-0 border-line bg-surface px-4 pt-4 pb-3"
+            >
+              {targets.map((t) => (
+                <Window key={t.id} state={statusOf(t, health.get(t.id), now).state} size="lg" />
+              ))}
+            </div>
+          )}
+        </section>
 
-      {error && (
-        <p
-          role="alert"
-          className="mt-6 max-w-2xl border border-dead/40 bg-dead/10 px-3 py-2 font-mono text-xs text-dead"
-        >
-          {error}
-        </p>
-      )}
-      {queued && (
-        <p
-          role="status"
-          className="mt-6 max-w-2xl border border-alive/40 bg-alive/10 px-3 py-2 font-mono text-xs text-alive"
-        >
-          Queued. The engine pings it on its next tick, within a minute. Refresh to see the result.
-        </p>
-      )}
-      {newTarget?.platform === "custom" &&
-        newTarget.heartbeat_type === "db_query" &&
-        newTarget.secret && <Snippet secret={newTarget.secret} />}
-
-      <section className="mt-10">
-        <h2 className="font-mono text-xs tracking-wide text-muted uppercase">Targets</h2>
-        {targets.length === 0 ? (
-          <p className="mt-4 font-mono text-xs text-muted">
-            no targets yet — nothing here is being kept alive
+        {error && (
+          <p
+            role="alert"
+            className="mt-8 max-w-2xl rounded-xl border border-dead/40 bg-dead/10 px-4 py-3 text-[15px] text-dead"
+          >
+            {error}
           </p>
-        ) : (
-          <ul className="mt-4 border border-line bg-surface">
-            {targets.map((t) => (
-              <TargetRow
-                key={t.id}
-                target={t}
-                health={health.get(t.id)}
-                days={days.get(t.id) ?? []}
-                now={now}
-              >
-                <form action={testTarget}>
-                  <input type="hidden" name="target_id" value={t.id} />
-                  <button type="submit" className="font-mono text-xs text-accent hover:underline">
-                    test now
-                  </button>
-                </form>
-                <form action={removeTarget}>
-                  <input type="hidden" name="target_id" value={t.id} />
-                  <button type="submit" className="font-mono text-xs text-muted hover:text-dead">
-                    remove
-                  </button>
-                </form>
-              </TargetRow>
-            ))}
-          </ul>
         )}
-      </section>
+        {queued && (
+          <p
+            role="status"
+            className="mt-8 max-w-2xl rounded-xl border border-alive/40 bg-alive/10 px-4 py-3 text-[15px] text-alive"
+          >
+            Check queued. It runs within a minute; refresh to see the result.
+          </p>
+        )}
+        {newTarget?.platform === "custom" &&
+          newTarget.heartbeat_type === "db_query" &&
+          newTarget.secret && <Snippet secret={newTarget.secret} />}
 
-      <TargetForms
-        projectId={project.id}
-        minInterval={limits.minInterval()}
-        heartbeatTypes={limits.allowedHeartbeatTypes()}
-      />
-    </main>
+        <section className="mt-10 border-t-2 border-line pt-10">
+          <h2 className="text-xl font-semibold">What we keep awake</h2>
+          {targets.length === 0 ? (
+            <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">
+              Nothing yet. Add the backend that pauses when this project goes quiet. That is usually
+              its database.
+            </p>
+          ) : (
+            <ul className="mt-5 space-y-4">
+              {targets.map((t) => (
+                <TargetCard
+                  key={t.id}
+                  target={t}
+                  health={health.get(t.id)}
+                  days={days.get(t.id) ?? []}
+                  now={now}
+                >
+                  <form action={testTarget}>
+                    <input type="hidden" name="target_id" value={t.id} />
+                    <button type="submit" className={ROW_ACTION}>
+                      Check now
+                    </button>
+                  </form>
+                  <form action={removeTarget}>
+                    <input type="hidden" name="target_id" value={t.id} />
+                    <button
+                      type="submit"
+                      className={`${ROW_ACTION} text-muted hover:border-dead/60 hover:text-dead`}
+                    >
+                      Remove
+                    </button>
+                  </form>
+                </TargetCard>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section id="add" className="mt-14 scroll-mt-8">
+          <h2 className="text-xl font-semibold">Add a backend</h2>
+          <p className="mt-1 mb-5 text-[15px] text-muted">Where does this project run?</p>
+          <AddTarget
+            kind={typeof add === "string" ? add : undefined}
+            projectId={project.id}
+            minInterval={limits.minInterval()}
+            heartbeatTypes={limits.allowedHeartbeatTypes()}
+          />
+        </section>
+      </main>
+    </div>
   );
 }
