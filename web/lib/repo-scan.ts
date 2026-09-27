@@ -20,6 +20,11 @@ const FILES = [
   "render.yaml",
 ];
 
+/** Whether a push touching these paths could change a scan's findings. */
+export function affectsScan(paths: string[]): boolean {
+  return paths.some((p) => FILES.includes(p) || p.startsWith(".github/workflows/"));
+}
+
 type Gh = (path: string, raw?: boolean) => Promise<Response>;
 
 function client(token: string, fetchFn: typeof fetch): Gh {

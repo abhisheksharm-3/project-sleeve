@@ -31,3 +31,21 @@ test("normalisePem restores newlines from a one-line env var", () => {
   );
   assert.equal(normalisePem(pem), pem);
 });
+
+test("mayAttach: own account by id, organisations only for owners", async () => {
+  const { mayAttach } = await import("./github-app.ts");
+  const me = { id: 7, login: "abhisheksharm-3" };
+  const mine = { id: 1, account: "abhisheksharm-3", accountId: 7, accountType: "User" as const };
+  const renamed = { ...mine, account: "old-name" };
+  const theirs = { ...mine, accountId: 8, account: "someone" };
+  const org = { id: 2, account: "acme", accountId: 99, accountType: "Organization" as const };
+  assert.equal(mayAttach(mine, me, null).ok, true);
+  assert.equal(mayAttach(renamed, me, null).ok, true);
+  assert.equal(mayAttach(theirs, me, null).ok, false);
+  assert.equal(mayAttach(org, me, "admin").ok, true);
+  assert.equal(mayAttach(org, me, "member").ok, false);
+  assert.equal(mayAttach(org, me, "none").ok, false);
+  const missing = mayAttach(org, me, "missing_permission");
+  assert.equal(missing.ok, false);
+  assert.match(missing.ok ? "" : missing.reason, /Members access/);
+});

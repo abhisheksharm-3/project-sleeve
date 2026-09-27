@@ -1,7 +1,7 @@
 /**
  * GitHub App access for private repositories. The user picks which repositories to share
- * when installing; the app asks for read-only Metadata, Contents and Actions, and can
- * never write.
+ * when installing; the app asks for read-only Metadata, Contents and Actions, plus
+ * organisation Members to confirm an organisation owner, and can never write.
  */
 import { createSign } from "node:crypto";
 
@@ -32,7 +32,12 @@ function headers(token: string) {
   };
 }
 
-export type Installation = { id: number; account: string };
+export type Installation = {
+  id: number;
+  account: string;
+  accountId: number;
+  accountType: "User" | "Organization";
+};
 
 export async function getInstallation(
   jwt: string,
@@ -46,9 +51,14 @@ export async function getInstallation(
   if (!res.ok) return null;
   const body = (await res.json()) as {
     id: number;
-    account: { login: string };
+    account: { login: string; id: number; type: "User" | "Organization" };
   };
-  return { id: body.id, account: body.account.login };
+  return {
+    id: body.id,
+    account: body.account.login,
+    accountId: body.account.id,
+    accountType: body.account.type,
+  };
 }
 
 export async function installationToken(
@@ -63,6 +73,69 @@ export async function installationToken(
   });
   if (!res.ok) throw new Error(`GitHub refused the app token (${res.status}).`);
   return ((await res.json()) as { token: string }).token;
+}
+
+export type GitHubUser = { id: number; login: string };
+
+/** Who the token belongs to, from GitHub itself: nothing the user can edit on our side. */
+export async function githubUser(
+  token: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<GitHubUser | null> {
+  const res = await fetchFn(`${API}/user`, { headers: headers(token), cache: "no-store" });
+  if (!res.ok) return null;
+  const body = (await res.json()) as GitHubUser;
+  return { id: body.id, login: body.login };
+}
+
+/**
+ * The user's role in an organisation, read with the installation's token, which needs the
+ * app's organisation Members permission. "missing_permission" when GitHub refuses that read.
+ */
+export async function orgRole(
+  installationToken: string,
+  org: string,
+  login: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<"admin" | "member" | "none" | "missing_permission"> {
+  const res = await fetchFn(
+    `${API}/orgs/${encodeURIComponent(org)}/memberships/${encodeURIComponent(login)}`,
+    { headers: headers(installationToken), cache: "no-store" },
+  );
+  if (res.status === 403) return "missing_permission";
+  if (!res.ok) return "none";
+  const body = (await res.json()) as { role: string; state: string };
+  if (body.state !== "active") return "none";
+  return body.role === "admin" ? "admin" : "member";
+}
+
+export type AttachVerdict = { ok: true } | { ok: false; reason: string };
+
+/**
+ * Whether this user may attach this installation. Their own account, matched by numeric id
+ * so a rename cannot confuse it, or an organisation they own: an owner can see every
+ * repository the installation grants, which an ordinary member might not.
+ */
+export function mayAttach(
+  inst: Installation,
+  user: GitHubUser,
+  role: Awaited<ReturnType<typeof orgRole>> | null,
+): AttachVerdict {
+  if (inst.accountType === "User")
+    return inst.accountId === user.id
+      ? { ok: true }
+      : { ok: false, reason: `That app was installed on ${inst.account}, not on ${user.login}.` };
+  if (role === "admin") return { ok: true };
+  if (role === "missing_permission")
+    return {
+      ok: false,
+      reason:
+        "The app cannot confirm who owns that organisation yet. Accept its request for organisation Members access in GitHub, then try again.",
+    };
+  return {
+    ok: false,
+    reason: `Only an owner of ${inst.account} can connect its repositories, and ${user.login} is not one.`,
+  };
 }
 
 export type AppRepo = {

@@ -1,14 +1,19 @@
 /**
  * GET /connect/github/callback — GitHub's setup URL after installing the app. Verifies the
- * state, then that the installation is on the user's own account, before storing it.
- *
- * ponytail: organisation installations are refused, because membership alone does not prove
- * the user can see every repository the installation grants. Add them with a user-to-server
- * token and GET /user/installations when someone needs orgs.
+ * state, asks GitHub who the signed-in user is, and stores the installation only if it is
+ * their own account or an organisation they own.
  */
 import { cookies } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
-import { appJwt, getInstallation } from "@/lib/github-app";
+import { githubToken } from "@/lib/github";
+import {
+  appJwt,
+  getInstallation,
+  githubUser,
+  installationToken,
+  mayAttach,
+  orgRole,
+} from "@/lib/github-app";
 import { githubAppConfig, INSTALL_COOKIE } from "@/lib/github-app-config";
 import { unseal } from "@/lib/sealed";
 import { siteUrl } from "@/lib/site-url";
@@ -34,16 +39,23 @@ export async function GET(request: NextRequest) {
     return back("GitHub did not say which installation this was.");
 
   const admin = createAdminClient();
-  const [installation, { data: profile }] = await Promise.all([
-    getInstallation(appJwt(config.appId, config.privateKey), installationId),
-    admin.from("profiles").select("github_username").eq("id", pending.userId).maybeSingle(),
+  const jwt = appJwt(config.appId, config.privateKey);
+  const [installation, user] = await Promise.all([
+    getInstallation(jwt, installationId),
+    githubToken(pending.userId)
+      .then((t) => githubUser(t))
+      .catch(() => null),
   ]);
   if (!installation) return back("GitHub does not know that installation.");
-  if (installation.account.toLowerCase() !== profile?.github_username?.toLowerCase()) {
-    return back(
-      `That app was installed on ${installation.account}. Install it on your own account, ${profile?.github_username ?? "the one you signed in with"}.`,
-    );
-  }
+  if (!user) return back("Sign out and sign in with GitHub again, then retry.");
+  const role =
+    installation.accountType === "Organization"
+      ? await installationToken(jwt, installation.id)
+          .then((t) => orgRole(t, installation.account, user.login))
+          .catch(() => "none" as const)
+      : null;
+  const verdict = mayAttach(installation, user, role);
+  if (!verdict.ok) return back(verdict.reason);
 
   await admin.from("github_installations").upsert(
     {
