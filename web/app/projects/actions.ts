@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { appwriteRowUrl, isAppwriteId } from "@/lib/appwrite";
 import { entitlements } from "@/lib/entitlements";
 import { track } from "@/lib/events";
-import { GitHubTokenMissing, githubToken, listRepos } from "@/lib/github";
+import { GitHubTokenMissing, githubToken, installationAccess, listRepos } from "@/lib/github";
 import { cadenceForSpace, parseSpaceId, resolveSpace } from "@/lib/huggingface";
 import { probeTarget } from "@/lib/probe";
 import { scanRepo } from "@/lib/repo-scan";
@@ -69,7 +69,7 @@ export async function importRepos(formData: FormData) {
   const { data: saved, error } = await createAdminClient()
     .from("projects")
     .upsert(
-      repos.slice(0, room).map((r) => ({ ...r, user_id: user.id })),
+      repos.slice(0, room).map(({ private: _, ...r }) => ({ ...r, user_id: user.id })),
       { onConflict: "user_id,github_id" },
     )
     .select("id, name");
@@ -86,11 +86,15 @@ export async function importRepos(formData: FormData) {
  * the import, and the project page offers to scan again.
  */
 async function scanProjects(userId: string, projects: { id: string; name: string }[]) {
-  const token = await githubToken(userId).catch(() => null);
-  if (!token) return;
+  const [userToken, { tokens }] = await Promise.all([
+    githubToken(userId).catch(() => null),
+    installationAccess(userId),
+  ]);
   const admin = createAdminClient();
   await Promise.all(
     projects.map(async (p) => {
+      const token = tokens.get(p.name) ?? userToken;
+      if (!token) return;
       const scan = await scanRepo(p.name, token).catch(() => null);
       if (scan)
         await admin

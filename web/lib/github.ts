@@ -1,5 +1,10 @@
-/** Lists a user's public GitHub repositories for import, using their stored OAuth token. */
+/**
+ * Lists the GitHub repositories a user can import: public ones through their OAuth token, and
+ * private ones through the GitHub App installations they attached.
+ */
 import "server-only";
+import { type AppRepo, appJwt, installationRepos, installationToken } from "./github-app";
+import { githubAppConfig } from "./github-app-config";
 import { createAdminClient } from "./supabase/admin";
 
 export type Repo = {
@@ -9,6 +14,7 @@ export type Repo = {
   language: string | null;
   last_commit_at: string | null;
   archived: boolean;
+  private: boolean;
 };
 
 export class GitHubTokenMissing extends Error {}
@@ -25,12 +31,6 @@ type ApiRepo = {
 
 const MAX_PAGES = 5;
 
-/**
- * Newest-pushed first, forks excluded. Throws GitHubTokenMissing when there is no token or
- * GitHub rejects it, so the caller can send the user back through sign-in.
- *
- * ponytail: stops at 500 repos (5 pages of 100); page further if someone owns more.
- */
 /** The user's stored GitHub token, or GitHubTokenMissing when sign-in has to run again. */
 export async function githubToken(userId: string): Promise<string> {
   const { data } = await createAdminClient()
@@ -42,9 +42,13 @@ export async function githubToken(userId: string): Promise<string> {
   return data.access_token;
 }
 
-export async function listRepos(userId: string): Promise<Repo[]> {
-  const token = await githubToken(userId);
-
+/**
+ * Public repositories, newest-pushed first, forks excluded. Throws GitHubTokenMissing when there is no token or
+ * GitHub rejects it, so the caller can send the user back through sign-in.
+ *
+ * ponytail: stops at 500 repos (5 pages of 100); page further if someone owns more.
+ */
+async function publicRepos(token: string): Promise<Repo[]> {
   const repos: Repo[] = [];
   for (let page = 1; page <= MAX_PAGES; page++) {
     const res = await fetch(
@@ -71,11 +75,66 @@ export async function listRepos(userId: string): Promise<Repo[]> {
         language: r.language,
         last_commit_at: r.pushed_at,
         archived: r.archived,
+        private: false,
       });
     }
     if (batch.length < 100) break;
   }
   return repos;
+}
+
+function fromApp(r: AppRepo): Repo {
+  return {
+    github_id: r.id,
+    name: r.full_name,
+    repo_url: r.html_url,
+    language: r.language,
+    last_commit_at: r.pushed_at,
+    archived: r.archived,
+    private: r.private,
+  };
+}
+
+/**
+ * Repositories granted through the user's app installations, each with the installation
+ * token that can read it. Empty when the app is not configured; an installation GitHub no
+ * longer honours, because it was uninstalled, is skipped.
+ */
+export async function installationAccess(
+  userId: string,
+): Promise<{ repos: Repo[]; tokens: Map<string, string> }> {
+  const access = { repos: [] as Repo[], tokens: new Map<string, string>() };
+  const config = githubAppConfig();
+  if (!config) return access;
+  const { data } = await createAdminClient()
+    .from("github_installations")
+    .select("installation_id")
+    .eq("user_id", userId);
+  const jwt = appJwt(config.appId, config.privateKey);
+  await Promise.all(
+    (data ?? []).map(async ({ installation_id }) => {
+      const token = await installationToken(jwt, installation_id).catch(() => null);
+      if (!token) return;
+      for (const r of await installationRepos(token).catch(() => [])) {
+        if (r.fork) continue;
+        access.tokens.set(r.full_name, token);
+        access.repos.push(fromApp(r));
+      }
+    }),
+  );
+  return access;
+}
+
+/** Public and installation repositories together, once each, newest-pushed first. */
+export async function listRepos(userId: string): Promise<Repo[]> {
+  const [open, { repos: granted }] = await Promise.all([
+    githubToken(userId).then(publicRepos),
+    installationAccess(userId),
+  ]);
+  const byId = new Map([...granted, ...open].map((r) => [r.github_id, r]));
+  return [...byId.values()].sort((a, b) =>
+    (b.last_commit_at ?? "").localeCompare(a.last_commit_at ?? ""),
+  );
 }
 
 const ABANDONED_AFTER_DAYS = 60;

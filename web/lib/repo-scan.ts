@@ -1,4 +1,4 @@
-/** Reads a public repository's config files and workflows from GitHub and reports findings. */
+/** Reads a repository's config files and workflows from GitHub and reports findings. */
 import { extractFindings, type Findings, looksLikeKeepAlive } from "./repo-findings.ts";
 
 export type KeepAliveWorkflow = {

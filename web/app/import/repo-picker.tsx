@@ -11,6 +11,7 @@ export type PickerRepo = {
   name: string;
   language: string | null;
   imported: boolean;
+  private: boolean;
   quiet: boolean;
 };
 
@@ -103,6 +104,7 @@ export function RepoPicker({ repos }: { repos: PickerRepo[] }) {
                           : r.quiet
                             ? "Quiet for 60+ days"
                             : (r.language ?? "Repository")}
+                        {r.private && !r.imported && ", private"}
                       </span>
                     </span>
                   </button>
