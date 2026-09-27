@@ -40,6 +40,7 @@ export async function generateMetadata({ params }: PageProps<"/s/[slug]">): Prom
 const OVERALL_LOOK: Record<Overall, { tone: string; window: string }> = {
   up: { tone: "text-alive", window: "window-lit" },
   degraded: { tone: "text-warn", window: "window-lit flicker" },
+  maintenance: { tone: "text-warn", window: "window-dim ring-1 ring-warn/70 ring-inset" },
   partial: { tone: "text-dead", window: "bg-dead flicker" },
   down: { tone: "text-dead", window: "bg-dead" },
   empty: { tone: "text-muted", window: "window-dark" },
@@ -51,6 +52,7 @@ const STATE_WORD: Record<State, { text: string; tone: string }> = {
   idle: { text: "Waiting for its first check", tone: "text-muted" },
   failing: { text: "Down", tone: "text-dead" },
   paused: { text: "Paused", tone: "text-dead" },
+  maintenance: { text: "Maintenance", tone: "text-warn" },
 };
 
 const DOWN_WORDS: State[] = ["failing", "paused"];
@@ -121,7 +123,14 @@ function history(page: StatusPageView, now: number): HistoryEntry[] {
       detail: `${NOTICE_TONE[n.kind].word}, resolved ${when(n.resolved_at ?? n.created_at)}.`,
       tone: "text-muted",
     }));
-  return [...outages, ...resolved].sort((a, b) => b.at.localeCompare(a.at));
+  const planned: HistoryEntry[] = page.maintenance.map((m) => ({
+    key: m.key,
+    at: m.startsAt,
+    title: `Planned maintenance on ${m.label}`,
+    detail: `${Date.parse(m.endsAt) > now ? "Until" : "Ended"} ${when(m.endsAt)}, from ${when(m.startsAt)}.${m.note ? ` ${m.note}` : ""}`,
+    tone: Date.parse(m.endsAt) > now ? "text-warn" : "text-muted",
+  }));
+  return [...outages, ...resolved, ...planned].sort((a, b) => b.at.localeCompare(a.at));
 }
 
 function mean(values: (number | null)[]): number | null {
@@ -258,7 +267,9 @@ export default async function PublicStatusPage({ params }: PageProps<"/s/[slug]"
           </section>
         )}
 
-        {(page.showOutages || page.notices.some((n) => n.resolved_at)) && (
+        {(page.showOutages ||
+          page.notices.some((n) => n.resolved_at) ||
+          page.maintenance.length > 0) && (
           <section className="mt-14">
             <h2 className="text-xl font-semibold">History</h2>
             {past.length === 0 ? (

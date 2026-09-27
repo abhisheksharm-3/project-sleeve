@@ -24,7 +24,14 @@ const DAYS = 30;
 /** Render's 15-minute sleep is reset by every check, so only day-long windows can run out. */
 const DAY_S = 86_400;
 const TROUBLE: State[] = ["failing", "paused", "pause_soon"];
-const RANK: Record<State, number> = { paused: 0, failing: 1, pause_soon: 2, idle: 3, alive: 4 };
+const RANK: Record<State, number> = {
+  paused: 0,
+  failing: 1,
+  pause_soon: 2,
+  maintenance: 3,
+  idle: 4,
+  alive: 5,
+};
 
 function repoOf(name: string) {
   const [owner, repo] = name.includes("/") ? name.split("/") : ["", name];
@@ -53,12 +60,17 @@ export default async function DashboardPage() {
 
   const projects = (projectRows ?? []) as Project[];
   const targets = projects.flatMap((p) => p.targets ?? []);
-  const { health, days } = await loadHealth(
+  const { health, days, maintenance } = await loadHealth(
     supabase,
     targets.map((t) => t.id),
   );
   const now = Date.now();
-  const status = new Map(targets.map((t) => [t.id, statusOf(t, health.get(t.id), now)]));
+  const status = new Map(
+    targets.map((t) => [
+      t.id,
+      statusOf({ ...t, maintenance: maintenance.get(t.id) }, health.get(t.id), now),
+    ]),
+  );
   const stateOf = (id: string): State => status.get(id)?.state ?? "idle";
   const trouble = targets.filter((t) => TROUBLE.includes(stateOf(t.id)));
   const rate = passRate([...health.values()]);

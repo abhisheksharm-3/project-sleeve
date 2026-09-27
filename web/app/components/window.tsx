@@ -7,6 +7,7 @@ const LOOK: Record<State, string> = {
   pause_soon: "window-lit flicker",
   failing: "bg-dead flicker",
   paused: "window-dark ring-1 ring-dead/70 ring-inset",
+  maintenance: "window-dim ring-1 ring-warn/70 ring-inset",
 };
 
 const SIZE = {
@@ -25,6 +26,7 @@ const WORD_TONE: Record<State, string> = {
   pause_soon: "text-warn",
   failing: "text-dead",
   paused: "text-dead",
+  maintenance: "text-warn",
 };
 
 /** The window plus its state in words, so colour and motion are never the only signal. */

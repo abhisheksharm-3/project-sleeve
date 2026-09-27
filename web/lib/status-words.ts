@@ -8,6 +8,11 @@ export const OVERALL_WORDS: Record<Overall, { text: string; short: string; color
     short: "mostly up",
     color: "#f2c98a",
   },
+  maintenance: {
+    text: "Planned maintenance is under way.",
+    short: "maintenance",
+    color: "#f2c98a",
+  },
   partial: { text: "Some of this is down.", short: "partly down", color: "#e26d5a" },
   down: { text: "Everything here is down.", short: "down", color: "#e26d5a" },
   empty: { text: "Nothing is on this page yet.", short: "empty", color: "#9b9ba4" },

@@ -13,6 +13,7 @@ import { isRestoreLink } from "@/lib/probe";
 import type { RepoScan } from "@/lib/repo-scan";
 import { requireUser } from "@/lib/session";
 import { FoundPanel } from "./found-panel";
+import { MaintenanceControl } from "./maintenance-control";
 import { SharePanel } from "./share-panel";
 import { AddTarget, type Prefill } from "./target-forms";
 
@@ -36,6 +37,7 @@ function headlineFor(states: State[]): string {
   if (states.some((s) => s === "paused")) return "Paused";
   if (states.some((s) => s === "failing")) return "Failing";
   if (states.some((s) => s === "pause_soon")) return "Close to pausing";
+  if (states.some((s) => s === "maintenance")) return "In maintenance";
   if (states.every((s) => s === "idle")) return "Waiting";
   return "Awake";
 }
@@ -98,7 +100,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
   if (!project) notFound();
 
   const targets = (project.targets ?? []) as Target[];
-  const [limits, { health, days }] = await Promise.all([
+  const [limits, { health, days, maintenance }] = await Promise.all([
     entitlements(user.id),
     loadHealth(
       supabase,
@@ -148,7 +150,13 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
           <dl className="mt-8 grid grid-cols-2 gap-x-10 gap-y-6 border-y border-line py-6 lg:grid-cols-4">
             <Stat
               label="State"
-              value={headlineFor(targets.map((t) => statusOf(t, health.get(t.id), now).state))}
+              value={headlineFor(
+                targets.map(
+                  (t) =>
+                    statusOf({ ...t, maintenance: maintenance.get(t.id) }, health.get(t.id), now)
+                      .state,
+                ),
+              )}
               note={`${targets.length} ${targets.length === 1 ? "backend" : "backends"} kept awake`}
             />
             <Stat label="Checks passed this week" value={rate === null ? "—" : `${rate}%`} />
@@ -223,7 +231,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
               {targets.map((t) => (
                 <TargetCard
                   key={t.id}
-                  target={t}
+                  target={{ ...t, maintenance: maintenance.get(t.id) }}
                   health={health.get(t.id)}
                   days={days.get(t.id) ?? []}
                   now={now}
@@ -239,6 +247,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
                     </form>
                   }
                 >
+                  <MaintenanceControl targetId={t.id} active={maintenance.has(t.id)} />
                   <form action={testTarget}>
                     <input type="hidden" name="target_id" value={t.id} />
                     <button type="submit" className={ROW_ACTION}>

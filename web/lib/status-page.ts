@@ -26,6 +26,14 @@ export type PageItem = {
 
 export type Outage = { key: string; label: string; startedAt: string; endedAt: string | null };
 
+export type PlannedWindow = {
+  key: string;
+  label: string;
+  startsAt: string;
+  endsAt: string;
+  note: string | null;
+};
+
 export type Notice = {
   id: number;
   kind: "incident" | "maintenance" | "notice";
@@ -35,7 +43,7 @@ export type Notice = {
   resolved_at: string | null;
 };
 
-export type Overall = "empty" | "up" | "degraded" | "partial" | "down";
+export type Overall = "empty" | "up" | "maintenance" | "degraded" | "partial" | "down";
 
 export type StatusPageView = {
   title: string;
@@ -46,6 +54,7 @@ export type StatusPageView = {
   showOutages: boolean;
   items: PageItem[];
   outages: Outage[];
+  maintenance: PlannedWindow[];
   notices: Notice[];
   overall: Overall;
 };
@@ -65,7 +74,10 @@ const DOWN: State[] = ["failing", "paused"];
 function overallOf(items: PageItem[]): Overall {
   if (items.length === 0) return "empty";
   const down = items.filter((i) => DOWN.includes(i.state)).length;
-  if (down === 0) return items.some((i) => i.lastFailed) ? "degraded" : "up";
+  if (down === 0) {
+    if (items.some((i) => i.state === "maintenance")) return "maintenance";
+    return items.some((i) => i.lastFailed) ? "degraded" : "up";
+  }
   return down === items.length ? "down" : "partial";
 }
 
@@ -119,16 +131,36 @@ export async function loadStatusPage(
   );
   const ids = rows.map((r) => r.targets.id);
 
-  const [{ data: healthRows }, { data: dailyRows }, { data: outageRows }] = ids.length
-    ? await Promise.all([
-        admin.from("target_health").select("*").in("target_id", ids),
-        admin.rpc("backend_daily", { p_targets: ids, p_days: HISTORY_DAYS }),
-        admin.rpc("backend_outages", {
-          p_targets: ids,
-          p_since: new Date(now - HISTORY_DAYS * DAY_MS).toISOString(),
-        }),
-      ])
-    : [{ data: [] }, { data: [] }, { data: [] }];
+  const [{ data: healthRows }, { data: dailyRows }, { data: outageRows }, { data: windowRows }] =
+    ids.length
+      ? await Promise.all([
+          admin.from("target_health").select("*").in("target_id", ids),
+          admin.rpc("backend_daily", { p_targets: ids, p_days: HISTORY_DAYS }),
+          admin.rpc("backend_outages", {
+            p_targets: ids,
+            p_since: new Date(now - HISTORY_DAYS * DAY_MS).toISOString(),
+          }),
+          admin
+            .from("maintenance_windows")
+            .select("id, target_id, starts_at, ends_at, note")
+            .in("target_id", ids)
+            .gt("ends_at", new Date(now - HISTORY_DAYS * DAY_MS).toISOString())
+            .order("starts_at", { ascending: false }),
+        ])
+      : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }];
+  type WindowRow = {
+    id: number;
+    target_id: string;
+    starts_at: string;
+    ends_at: string;
+    note: string | null;
+  };
+  const windows = (windowRows ?? []) as WindowRow[];
+  const active = new Map(
+    windows
+      .filter((w) => Date.parse(w.starts_at) <= now && Date.parse(w.ends_at) > now)
+      .map((w) => [w.target_id, { ends_at: w.ends_at, note: w.note }]),
+  );
 
   const health = new Map(((healthRows ?? []) as Health[]).map((h) => [h.target_id, h]));
   const daily = new Map<string, Daily[]>();
@@ -139,7 +171,7 @@ export async function loadStatusPage(
   const items = rows.map((r, position): PageItem => {
     const t = r.targets;
     const days = daily.get(t.id) ?? [];
-    const s = statusOf(t, health.get(t.id), now);
+    const s = statusOf({ ...t, maintenance: active.get(t.id) }, health.get(t.id), now);
     const key = `backend-${position}`;
     const h = health.get(t.id);
     const label = r.label?.trim() || defaultLabel(t);
@@ -186,6 +218,15 @@ export async function loadStatusPage(
     showOutages: page.show_outages,
     items,
     outages,
+    maintenance: windows
+      .filter((w) => Date.parse(w.starts_at) <= now)
+      .map((w) => ({
+        key: `maintenance-${w.id}`,
+        label: labels.get(w.target_id) ?? "A backend",
+        startsAt: w.starts_at,
+        endsAt: w.ends_at,
+        note: w.note,
+      })),
     notices: (noticeRows ?? []) as Notice[],
     overall: overallOf(items),
   };

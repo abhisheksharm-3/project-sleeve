@@ -598,3 +598,49 @@ export async function stopAutoRestore(formData: FormData) {
   revalidatePath(`/projects/${target.project_id}`);
   redirect(`/projects/${target.project_id}`);
 }
+
+const MAINTENANCE_HOURS = [1, 3, 12, 24, 72, 168];
+
+/**
+ * Starts a maintenance window now. Checks keep running; alerts are held and status pages
+ * say it is planned. A window already in force is replaced rather than stacked.
+ */
+export async function startMaintenance(formData: FormData) {
+  const { user, target } = await ownedTarget(String(formData.get("target_id") ?? ""));
+  const back = `/projects/${target.project_id}`;
+  const hours = Number(formData.get("hours"));
+  if (!MAINTENANCE_HOURS.includes(hours)) fail(back, "Pick how long the maintenance lasts.");
+  const note =
+    String(formData.get("note") ?? "")
+      .trim()
+      .slice(0, 200) || null;
+  const now = new Date();
+  const admin = createAdminClient();
+  await admin
+    .from("maintenance_windows")
+    .update({ ends_at: now.toISOString() })
+    .eq("target_id", target.id)
+    .gt("ends_at", now.toISOString());
+  await admin.from("maintenance_windows").insert({
+    target_id: target.id,
+    starts_at: now.toISOString(),
+    ends_at: new Date(now.getTime() + hours * 3_600_000).toISOString(),
+    note,
+  });
+  await track(user.id, "maintenance_started", { hours });
+  revalidatePath(back);
+  redirect(back);
+}
+
+export async function endMaintenance(formData: FormData) {
+  const { target } = await ownedTarget(String(formData.get("target_id") ?? ""));
+  const now = new Date().toISOString();
+  await createAdminClient()
+    .from("maintenance_windows")
+    .update({ ends_at: now })
+    .eq("target_id", target.id)
+    .lte("starts_at", now)
+    .gt("ends_at", now);
+  revalidatePath(`/projects/${target.project_id}`);
+  redirect(`/projects/${target.project_id}`);
+}

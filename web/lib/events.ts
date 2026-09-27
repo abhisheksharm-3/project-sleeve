@@ -7,7 +7,8 @@ export type EventName =
   | "project_created"
   | "target_added"
   | "target_tested"
-  | "target_removed";
+  | "target_removed"
+  | "maintenance_started";
 
 export async function track(userId: string, name: EventName, props: Record<string, unknown> = {}) {
   const { error } = await createAdminClient()

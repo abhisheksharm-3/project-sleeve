@@ -2,7 +2,23 @@
 import { ago } from "./format.ts";
 import { bufferText, type Health, type State, stateOf } from "./health.ts";
 
-export type Describable = { url: string; platform: string; heartbeat_type: string };
+export type Maintenance = { ends_at: string; note: string | null };
+
+export type Describable = {
+  url: string;
+  platform: string;
+  heartbeat_type: string;
+  /** The window in force now, if any. */
+  maintenance?: Maintenance | null;
+};
+
+function forAnother(ms: number): string {
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
+  return hours % 24 ? `${Math.floor(hours / 24)}d ${hours % 24}h` : `${Math.floor(hours / 24)}d`;
+}
 
 export const PLATFORM_NAMES: Record<string, string> = {
   supabase: "Supabase",
@@ -67,7 +83,14 @@ export function caveat(t: Describable): string | null {
 
 export type Status = { state: State; headline: string; sentence: string };
 
+/** Maintenance outranks every other state while it lasts: the owner said to expect trouble. */
 export function statusOf(t: Describable, h: Health | undefined, now = Date.now()): Status {
+  if (t.maintenance && Date.parse(t.maintenance.ends_at) > now)
+    return {
+      state: "maintenance",
+      headline: "Maintenance",
+      sentence: `Planned maintenance for another ${forAnother(Date.parse(t.maintenance.ends_at) - now)}${t.maintenance.note ? `: ${t.maintenance.note}` : ""}. Checks still run; alerts wait until it ends.`,
+    };
   const state = stateOf(h, now);
   const platform = PLATFORM_NAMES[t.platform] ?? t.platform;
   const checked = h?.last_ping_at ? `Checked ${ago(h.last_ping_at, now)}.` : "";

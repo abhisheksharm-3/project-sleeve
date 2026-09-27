@@ -1,6 +1,6 @@
 /** One backend on its project page: state, what it is, 30 days of checks, and how it is run. */
 import type { ReactNode } from "react";
-import { caveat, methodText, statusOf, targetTitle } from "@/lib/describe";
+import { caveat, type Maintenance, methodText, statusOf, targetTitle } from "@/lib/describe";
 import { every } from "@/lib/format";
 import { bufferText, type Health } from "@/lib/health";
 import type { Day } from "@/lib/load-health";
@@ -19,6 +19,7 @@ export type CardTarget = {
   platform_ref?: string | null;
   method?: string;
   auto_restore?: boolean;
+  maintenance?: Maintenance | null;
 };
 
 const DAYS = 30;
@@ -29,6 +30,7 @@ const SENTENCE_TONE = {
   pause_soon: "text-warn",
   failing: "text-dead",
   paused: "text-dead",
+  maintenance: "text-warn",
 };
 
 function capitalise(s: string) {

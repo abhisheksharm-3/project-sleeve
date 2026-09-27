@@ -13,7 +13,7 @@ export type Health = {
   latency_7d: number | null;
 };
 
-export type State = "idle" | "alive" | "failing" | "pause_soon" | "paused";
+export type State = "idle" | "alive" | "failing" | "pause_soon" | "paused" | "maintenance";
 
 const FAILING_STREAK = 3;
 const PAUSE_SOON_MS = 48 * 3_600_000;
