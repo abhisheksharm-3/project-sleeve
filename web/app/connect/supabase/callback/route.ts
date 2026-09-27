@@ -33,14 +33,19 @@ export async function GET(request: NextRequest) {
     return fail("That sign-in did not match. Start again.");
 
   try {
-    const token = await exchangeCode({
+    const { accessToken, refreshToken } = await exchangeCode({
       code: params.get("code") ?? "",
       verifier: pending.verifier,
       redirectUri: config.redirectUri,
       clientId: config.clientId,
       clientSecret: config.clientSecret,
     });
-    const active: ActiveConnect = { token, projectId: pending.projectId, userId: pending.userId };
+    const active: ActiveConnect = {
+      token: accessToken,
+      refresh: refreshToken,
+      projectId: pending.projectId,
+      userId: pending.userId,
+    };
     jar.set(CONNECT_COOKIE, seal(active, config.clientSecret), cookieOptions);
     return NextResponse.redirect(`${siteUrl()}${CONNECT_PATH}?project=${pending.projectId}`);
   } catch (e) {

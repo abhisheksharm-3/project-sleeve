@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { AppHeader } from "@/app/components/app-header";
 import { Stat } from "@/app/components/stat";
 import { TargetCard } from "@/app/components/target-card";
-import { removeTarget, testTarget } from "@/app/projects/actions";
+import { removeTarget, stopAutoRestore, testTarget } from "@/app/projects/actions";
 import { statusOf } from "@/lib/describe";
 import { entitlements } from "@/lib/entitlements";
 import { ago } from "@/lib/format";
@@ -26,6 +26,7 @@ type Target = {
   secret: string | null;
   platform_ref: string | null;
   method: string;
+  auto_restore: boolean;
 };
 
 /** Render's 15-minute sleep is reset by every check, so only day-long windows can run out. */
@@ -90,7 +91,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
   const { data: project } = await supabase
     .from("projects")
     .select(
-      "id, name, repo_url, github_id, scan, scanned_at, public, targets (id, url, platform, heartbeat_type, interval_seconds, secret, platform_ref, method)",
+      "id, name, repo_url, github_id, scan, scanned_at, public, targets (id, url, platform, heartbeat_type, interval_seconds, secret, platform_ref, method, auto_restore)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -224,6 +225,17 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
                   health={health.get(t.id)}
                   days={days.get(t.id) ?? []}
                   now={now}
+                  autoRestoreControl={
+                    <form action={stopAutoRestore}>
+                      <input type="hidden" name="target_id" value={t.id} />
+                      <button
+                        type="submit"
+                        className="underline decoration-line underline-offset-4 hover:text-dead"
+                      >
+                        Turn off
+                      </button>
+                    </form>
+                  }
                 >
                   <form action={testTarget}>
                     <input type="hidden" name="target_id" value={t.id} />

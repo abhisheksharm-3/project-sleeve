@@ -1,7 +1,8 @@
 /**
  * The Supabase Management API calls behind one-click setup: exchange the OAuth code, list
- * projects, read the public key, and install keepalive(). The token is used for these and
- * never stored.
+ * projects, read the public key, install keepalive(), and restore a paused project. The
+ * access token is used for these and never stored; the refresh token is kept only when the
+ * user opts into auto-restore.
  */
 import { isPublicSupabaseKey } from "./supabase-key.ts";
 import { KEEPALIVE_SQL } from "./target-url.ts";
@@ -20,7 +21,7 @@ export async function exchangeCode(
     clientSecret: string;
   },
   fetchFn: typeof fetch = fetch,
-): Promise<string> {
+): Promise<{ accessToken: string; refreshToken: string | null }> {
   const res = await fetchFn(`${API}/v1/oauth/token`, {
     method: "POST",
     headers: {
@@ -36,9 +37,9 @@ export async function exchangeCode(
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Supabase refused the sign-in (${res.status}).`);
-  const body = (await res.json()) as { access_token?: string };
+  const body = (await res.json()) as { access_token?: string; refresh_token?: string };
   if (!body.access_token) throw new Error("Supabase returned no access token.");
-  return body.access_token;
+  return { accessToken: body.access_token, refreshToken: body.refresh_token ?? null };
 }
 
 function call(token: string, path: string, init: RequestInit, fetchFn: typeof fetch) {
@@ -102,4 +103,14 @@ export async function installKeepalive(
     fetchFn,
   );
   if (!res.ok) throw new Error(`Could not install keepalive() (${res.status}).`);
+}
+
+/** Asks Supabase to bring a paused project back. It takes a few minutes to come up. */
+export async function restoreProject(
+  token: string,
+  ref: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<void> {
+  const res = await call(token, `/v1/projects/${ref}/restore`, { method: "POST" }, fetchFn);
+  if (!res.ok) throw new Error(`Supabase would not restore that project (${res.status}).`);
 }

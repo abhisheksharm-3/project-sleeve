@@ -21,7 +21,7 @@ import {
   connectConfig,
 } from "@/lib/supabase-connect";
 import { isPublicSupabaseKey } from "@/lib/supabase-key";
-import { installKeepalive, publicKey } from "@/lib/supabase-mgmt";
+import { installKeepalive, publicKey, restoreProject } from "@/lib/supabase-mgmt";
 import { supabaseTargetUrl, validateTargetUrl } from "@/lib/target-url";
 
 const INTERVALS = [21_600, 43_200, 86_400];
@@ -168,6 +168,7 @@ type NewTarget = {
   method?: string;
   platform_ref?: string;
   pause_window_seconds?: number;
+  auto_restore?: boolean;
 };
 
 const RENDER_CADENCE = 600;
@@ -491,11 +492,68 @@ export async function provisionSupabase(formData: FormData) {
   }
   jar.delete({ name: CONNECT_COOKIE, path: CONNECT_PATH });
 
+  const autoRestore = formData.get("auto_restore") === "on" && active.refresh !== null;
+  if (autoRestore)
+    await createAdminClient().rpc("store_supabase_grant", {
+      p_user: user.id,
+      p_refresh: active.refresh,
+    });
+
   await saveTarget(
     user.id,
     active.projectId,
-    { platform: "supabase", url, heartbeat_type: "db_query", secret: key },
+    {
+      platform: "supabase",
+      url,
+      heartbeat_type: "db_query",
+      secret: key,
+      auto_restore: autoRestore,
+    },
     limits.clampInterval(21_600, "supabase"),
     "supabase",
   );
+}
+
+/** Restores a paused Supabase project once, with the token from the connect flow. Stores nothing. */
+export async function restoreSupabaseNow(formData: FormData) {
+  const { user } = await requireUser();
+  const config = connectConfig();
+  const active = config
+    ? unseal<ActiveConnect>((await cookies()).get(CONNECT_COOKIE)?.value, config.clientSecret)
+    : null;
+  if (!active || active.userId !== user.id)
+    fail("/dashboard", "Your Supabase connection expired. Connect again.");
+  const ref = String(formData.get("ref") ?? "");
+  if (!/^[a-z0-9]{20}$/.test(ref)) fail(CONNECT_PATH, "Pick one of your Supabase projects.");
+  try {
+    await restoreProject(active.token, ref);
+  } catch (e) {
+    fail(CONNECT_PATH, e instanceof Error ? e.message : "Supabase would not restore it.");
+  }
+  redirect(`${CONNECT_PATH}?restoring=${ref}`);
+}
+
+/**
+ * Turns auto-restore off for one backend. When it was the last one, the stored Supabase
+ * token is deleted too, so nothing is kept that nothing uses.
+ */
+export async function stopAutoRestore(formData: FormData) {
+  const { supabase, user } = await requireUser();
+  const id = String(formData.get("target_id") ?? "");
+  const { data: target } = await supabase
+    .from("targets")
+    .select("id, project_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!target) fail("/dashboard", "That backend is not yours.");
+  const admin = createAdminClient();
+  await admin.from("targets").update({ auto_restore: false }).eq("id", id);
+  const { count } = await admin
+    .from("targets")
+    .select("id", { count: "exact", head: true })
+    .eq("auto_restore", true)
+    .in("project_id", await userProjectIds(user.id));
+  if (!count) await admin.rpc("drop_supabase_grant", { p_user: user.id });
+  revalidatePath(`/projects/${target.project_id}`);
+  redirect(`/projects/${target.project_id}`);
 }

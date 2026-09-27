@@ -18,6 +18,7 @@ export type CardTarget = {
   interval_seconds: number;
   platform_ref?: string | null;
   method?: string;
+  auto_restore?: boolean;
 };
 
 const DAYS = 30;
@@ -40,12 +41,14 @@ export function TargetCard({
   days,
   now,
   children,
+  autoRestoreControl,
 }: {
   target: CardTarget;
   health: Health | undefined;
   days: Day[];
   now: number;
   children?: ReactNode;
+  autoRestoreControl?: ReactNode;
 }) {
   const { title, detail } = targetTitle(target);
   const status = statusOf(target, health, now);
@@ -87,6 +90,15 @@ export function TargetCard({
           </div>
         ))}
       </dl>
+      {target.auto_restore && (
+        <p className="mt-3 flex flex-wrap items-center gap-x-3 text-sm text-muted">
+          <span>
+            <span className="font-medium text-alive">Auto-restore on.</span> If Supabase pauses it
+            anyway, we restore it and tell you.
+          </span>
+          {autoRestoreControl}
+        </p>
+      )}
       {warning && <p className="mt-3 text-sm text-warn">{warning}</p>}
       {status.state === "paused" && restore && (
         <a

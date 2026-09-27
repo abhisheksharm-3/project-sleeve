@@ -1,7 +1,7 @@
 /**
- * One-click Supabase setup, shared by its routes and action. The Management API token lives
- * only in a sealed, httpOnly cookie scoped to /connect/supabase for ten minutes; it is never
- * written to the database.
+ * One-click Supabase setup, shared by its routes and action. The Management API tokens live
+ * only in a sealed, httpOnly cookie scoped to /connect/supabase for ten minutes. The refresh
+ * token is written anywhere else only if the user opts into auto-restore, and then to Vault.
  */
 import "server-only";
 import { siteUrl } from "./site-url";
@@ -11,7 +11,12 @@ export const CONNECT_PATH = "/connect/supabase";
 export const CONNECT_TTL_SECONDS = 600;
 
 export type PendingConnect = { verifier: string; state: string; projectId: string; userId: string };
-export type ActiveConnect = { token: string; projectId: string; userId: string };
+export type ActiveConnect = {
+  token: string;
+  refresh: string | null;
+  projectId: string;
+  userId: string;
+};
 
 export function connectConfig() {
   const clientId = process.env.SUPABASE_OAUTH_CLIENT_ID;

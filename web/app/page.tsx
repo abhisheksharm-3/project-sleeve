@@ -130,11 +130,14 @@ export default function LandingPage() {
         </section>
 
         <section className={`border-t border-line py-24 ${PAD}`}>
-          <h2 className="max-w-2xl text-3xl font-semibold sm:text-4xl">What we cannot do</h2>
+          <h2 className="max-w-2xl text-3xl font-semibold sm:text-4xl">
+            If a light goes out anyway
+          </h2>
           <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-muted">
-            We keep a light on; we cannot switch one back on. Supabase has no way to resume a paused
-            project from outside, so if yours is already asleep, restore it in your dashboard first.
-            From then on, it stays lit.
+            Connect your Supabase account and turn on auto-restore, and a project that pauses anyway
+            is switched back on for you, with a message to say so. It is off unless you choose it.
+            On other platforms, restore it from their dashboard and the next check picks it straight
+            back up.
           </p>
           <Link
             href="/login"
