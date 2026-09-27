@@ -182,11 +182,12 @@ async function readAppwriteTarget(formData: FormData, back: string): Promise<New
   const url = appwriteRowUrl(
     String(formData.get("endpoint") ?? ""),
     String(formData.get("appwrite_database") ?? ""),
+    String(formData.get("appwrite_table") ?? ""),
   );
   if (!url)
     fail(
       back,
-      "Use your Appwrite Cloud endpoint (e.g. https://fra.cloud.appwrite.io/v1) and your database id.",
+      "Use your Appwrite Cloud endpoint (e.g. https://fra.cloud.appwrite.io/v1), and the database and table ids shown in the Console.",
     );
   const projectId = String(formData.get("appwrite_project") ?? "").trim();
   if (!isAppwriteId(projectId)) fail(back, "That does not look like an Appwrite project id.");
