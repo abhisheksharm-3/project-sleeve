@@ -44,15 +44,15 @@ async function onPush(push: Push, appId: string, privateKey: string) {
 
 export async function POST(request: NextRequest) {
   const secret = process.env.GITHUB_APP_WEBHOOK_SECRET;
-  const config = githubAppConfig();
-  if (!secret || !config) return new NextResponse(null, { status: 503 });
+  if (!secret) return new NextResponse(null, { status: 503 });
 
   const body = await request.text();
   if (!validSignature(body, request.headers.get("x-hub-signature-256"), secret))
     return new NextResponse(null, { status: 401 });
 
   const event = request.headers.get("x-github-event");
-  if (event === "push") {
+  const config = githubAppConfig();
+  if (event === "push" && config) {
     const push = JSON.parse(body) as Push;
     after(() => onPush(push, config.appId, config.privateKey).catch(console.error));
   } else if (event === "installation") {
