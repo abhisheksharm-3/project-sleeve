@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { entitlements } from "@/lib/entitlements";
+import { ago, every } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
 type Target = {
@@ -33,20 +35,6 @@ async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/login");
-}
-
-function ago(iso: string): string {
-  const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (seconds < 60) return `${Math.floor(seconds)}s ago`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  return `${Math.floor(seconds / 86400)}d ago`;
-}
-
-function every(seconds: number): string {
-  if (seconds % 3600 === 0) return `every ${seconds / 3600}h`;
-  if (seconds % 60 === 0) return `every ${seconds / 60}m`;
-  return `every ${seconds}s`;
 }
 
 export default async function DashboardPage() {
@@ -101,6 +89,9 @@ export default async function DashboardPage() {
           {profile?.github_username && (
             <span className="font-mono text-xs text-muted">{profile.github_username}</span>
           )}
+          <Link href="/import" className="font-mono text-xs text-muted hover:text-text">
+            + project
+          </Link>
           <form action={signOut}>
             <button
               type="submit"
@@ -120,14 +111,23 @@ export default async function DashboardPage() {
               Import a repository to create a project, then point a target at the thing that
               actually pauses — usually your database, not the site in front of it.
             </p>
-            <p className="mt-6 font-mono text-xs text-muted">repo import lands in the next slice</p>
+            <Link
+              href="/import"
+              className="mt-6 inline-block border border-line bg-raised px-4 py-2 text-sm font-medium hover:border-muted/40"
+            >
+              Import a repository
+            </Link>
           </div>
         ) : (
           <div className="space-y-8">
             {projects.map((project) => (
               <section key={project.id}>
                 <div className="flex items-baseline gap-3 border-b border-line pb-2">
-                  <h2 className="text-sm font-medium">{project.name}</h2>
+                  <h2 className="text-sm font-medium">
+                    <Link href={`/projects/${project.id}`} className="hover:text-accent">
+                      {project.name}
+                    </Link>
+                  </h2>
                   {project.language && (
                     <span className="font-mono text-xs text-muted">{project.language}</span>
                   )}
