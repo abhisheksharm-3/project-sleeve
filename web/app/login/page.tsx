@@ -13,7 +13,7 @@ import type { DayState } from "@/lib/uptime";
  * at the door — read access to every private repository — is the kind of prompt that makes
  * a developer close the tab (spec §6).
  */
-async function signInWithGitHub() {
+async function signInWithGitHub(formData: FormData) {
   "use server";
 
   // The origin comes from configuration, never from request headers: a redirect_uri built
@@ -23,7 +23,10 @@ async function signInWithGitHub() {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "github",
-    options: { redirectTo: `${origin}/auth/callback`, scopes: "read:user" },
+    options: {
+      redirectTo: `${origin}/auth/callback${nextQuery(formData.get("next"))}`,
+      scopes: "read:user",
+    },
   });
 
   if (error || !data.url) {
@@ -85,8 +88,15 @@ function GitHubMark() {
   );
 }
 
+/** Only an invite link is carried through sign-in; the callback re-checks it stays on-site. */
+function nextQuery(next: FormDataEntryValue | null): string {
+  return typeof next === "string" && /^\/invite\/[A-Za-z0-9_-]+$/.test(next)
+    ? `?next=${encodeURIComponent(next)}`
+    : "";
+}
+
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
-  const { error } = await searchParams;
+  const { error, next } = await searchParams;
   const today = Date.parse("2026-01-30T12:00:00Z");
 
   return (
@@ -116,6 +126,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
             )}
 
             <form action={signInWithGitHub} className="mt-10">
+              {typeof next === "string" && <input type="hidden" name="next" value={next} />}
               <button
                 type="submit"
                 className="flex w-full items-center justify-center gap-2.5 rounded-full bg-alive px-6 py-3.5 text-[15px] font-semibold text-ink transition-colors hover:bg-warn"

@@ -34,7 +34,7 @@ async function createUser(): Promise<TestUser & { password: string }> {
   return { id: data.user.id, email, password };
 }
 
-async function signIn(page: Page, email: string, password: string) {
+async function signIn(page: Page, email: string, password: string): Promise<string> {
   const client = createClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "", {
     auth: { persistSession: false },
   });
@@ -52,12 +52,15 @@ async function signIn(page: Page, email: string, password: string) {
       sameSite: "Lax" as const,
     })),
   );
+  return data.session.access_token;
 }
+
+type OtherUser = TestUser & { page: Page; accessToken: string };
 
 export const test = base.extend<{
   user: TestUser;
   signedIn: Page;
-  newUser: () => Promise<TestUser & { page: Page }>;
+  newUser: () => Promise<OtherUser>;
 }>({
   user: async ({ page }, use) => {
     const u = await createUser();
@@ -75,14 +78,22 @@ export const test = base.extend<{
       const u = await createUser();
       made.push(u.id);
       const page = await (await browser.newContext({ baseURL: "http://localhost:3000" })).newPage();
-      await signIn(page, u.email, u.password);
-      return { id: u.id, email: u.email, page };
+      const accessToken = await signIn(page, u.email, u.password);
+      return { id: u.id, email: u.email, page, accessToken };
     });
     for (const id of made) await admin.auth.admin.deleteUser(id);
   },
 });
 
 export { expect } from "@playwright/test";
+
+/** A Supabase client acting as a signed-in user, to test what RLS lets them read directly. */
+export function clientAs(accessToken: string): SupabaseClient {
+  return createClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "", {
+    auth: { persistSession: false },
+    global: { headers: { authorization: `Bearer ${accessToken}` } },
+  });
+}
 
 /** A project made directly in the database for the user, skipping the GitHub import. */
 export async function seedProject(userId: string, name: string): Promise<string> {

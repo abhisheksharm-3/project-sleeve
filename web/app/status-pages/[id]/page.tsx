@@ -45,7 +45,8 @@ export default async function StatusPageEditor({
       .maybeSingle(),
     supabase
       .from("projects")
-      .select("id, name, targets (id, url, platform, heartbeat_type)")
+      .select("id, name, targets (id, url, platform, heartbeat_type, label)")
+      .eq("user_id", session.user.id)
       .eq("archived", false)
       .order("created_at"),
   ]);

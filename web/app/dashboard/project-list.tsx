@@ -23,6 +23,7 @@ export type ListProject = {
   repo: string;
   owner: string | null;
   touched: string | null;
+  shared: boolean;
   worst: State | null;
   needsYou: boolean;
   backends: ListBackend[];
@@ -109,6 +110,11 @@ export function ProjectList({ projects, days }: { projects: ListProject[]; days:
                   {p.repo}
                 </Link>
                 {p.owner && <span className="text-sm text-muted max-sm:hidden">{p.owner}</span>}
+                {p.shared && (
+                  <span className="rounded-full border border-line px-2 py-0.5 text-xs text-muted">
+                    Shared with you
+                  </span>
+                )}
                 {p.touched && (
                   <span className="ml-auto text-sm text-muted">Code touched {p.touched}</span>
                 )}

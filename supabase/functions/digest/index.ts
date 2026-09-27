@@ -1,5 +1,6 @@
 /**
- * Mondays: one message per user with a webhook and the digest on, covering the week's checks,
+ * Mondays: one message per user with a webhook and the digest on, covering their own and
+ * shared projects: the week's checks,
  * anything in trouble, the nearest pause deadline, and keep-alive workflows GitHub stopped.
  * A user sent one in the last six days is skipped, so a retried cron run cannot double-send.
  *
@@ -50,10 +51,19 @@ Deno.serve(async (req) => {
 
   let sent = 0;
   for (const c of (channels ?? []) as Channel[]) {
+    const { data: shared } = await db
+      .from("project_members")
+      .select("project_id")
+      .eq("user_id", c.user_id);
+    const sharedIds = (shared ?? []).map((m) => m.project_id);
     const { data: projects } = await db
       .from("projects")
       .select("name, scan, targets (id, platform)")
-      .eq("user_id", c.user_id)
+      .or(
+        sharedIds.length
+          ? `user_id.eq.${c.user_id},id.in.(${sharedIds.join(",")})`
+          : `user_id.eq.${c.user_id}`,
+      )
       .eq("archived", false);
     const list = (projects ?? []) as Project[];
     const ids = list.flatMap((p) => p.targets.map((t) => t.id));

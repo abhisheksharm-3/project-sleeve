@@ -115,6 +115,7 @@ export async function rescanProject(formData: FormData) {
     .from("projects")
     .select("id, name, github_id")
     .eq("id", id)
+    .eq("user_id", user.id)
     .maybeSingle();
   if (!project) fail("/dashboard", "That project is not yours.");
   if (!project.github_id)
@@ -124,11 +125,16 @@ export async function rescanProject(formData: FormData) {
   redirect(`/projects/${id}?scanned=1#found`);
 }
 
-/** Publishing is the owner's choice alone; the RLS read proves they own the project first. */
+/** Publishing is the owner's choice alone; members of a shared project cannot. */
 export async function setPublic(formData: FormData) {
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
   const id = String(formData.get("project_id") ?? "");
-  const { data: project } = await supabase.from("projects").select("id").eq("id", id).maybeSingle();
+  const { data: project } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .maybeSingle();
   if (!project) fail("/dashboard", "That project is not yours.");
   await createAdminClient()
     .from("projects")
@@ -451,6 +457,7 @@ export async function addTarget(formData: FormData) {
     .from("projects")
     .select("id")
     .eq("id", projectId)
+    .eq("user_id", user.id)
     .maybeSingle();
   if (!project) fail("/dashboard", "That project is not yours.");
 
@@ -475,14 +482,28 @@ export async function addTarget(formData: FormData) {
   await saveTarget(user.id, projectId, target, interval, String(formData.get("kind") ?? ""));
 }
 
+/** A backend in a project the user owns: for changes only the owner may make. */
 async function ownedTarget(targetId: string) {
+  const { supabase, user } = await requireUser();
+  const { data } = await supabase
+    .from("targets")
+    .select("id, project_id, projects!inner (user_id)")
+    .eq("id", targetId)
+    .eq("projects.user_id", user.id)
+    .maybeSingle();
+  if (!data) fail("/dashboard", "Only the project's owner can do that.");
+  return { user, target: { id: data.id, project_id: data.project_id as string } };
+}
+
+/** A backend the user can see, owned or shared: for checks and maintenance. */
+async function readableTarget(targetId: string) {
   const { supabase, user } = await requireUser();
   const { data } = await supabase
     .from("targets")
     .select("id, project_id")
     .eq("id", targetId)
     .maybeSingle();
-  if (!data) fail("/dashboard", "That target is not yours.");
+  if (!data) fail("/dashboard", "That backend is not in any of your projects.");
   return { user, target: data };
 }
 
@@ -491,7 +512,7 @@ async function ownedTarget(targetId: string) {
  * The app never calls the engine directly — they share only the database (spec §3).
  */
 export async function testTarget(formData: FormData) {
-  const { user, target } = await ownedTarget(String(formData.get("target_id") ?? ""));
+  const { user, target } = await readableTarget(String(formData.get("target_id") ?? ""));
   await createAdminClient()
     .from("jobs")
     .update({ next_run_at: new Date().toISOString() })
@@ -533,6 +554,7 @@ export async function provisionSupabase(formData: FormData) {
     .from("projects")
     .select("id")
     .eq("id", active.projectId)
+    .eq("user_id", user.id)
     .maybeSingle();
   if (!project) fail("/dashboard", "That project is not yours.");
 
@@ -616,10 +638,11 @@ export async function stopAutoRestore(formData: FormData) {
   const id = String(formData.get("target_id") ?? "");
   const { data: target } = await supabase
     .from("targets")
-    .select("id, project_id")
+    .select("id, project_id, projects!inner (user_id)")
     .eq("id", id)
+    .eq("projects.user_id", user.id)
     .maybeSingle();
-  if (!target) fail("/dashboard", "That backend is not yours.");
+  if (!target) fail("/dashboard", "Only the project's owner can do that.");
   const admin = createAdminClient();
   await admin.from("targets").update({ auto_restore: false }).eq("id", id);
   const { count } = await admin
@@ -639,7 +662,7 @@ const MAINTENANCE_HOURS = [1, 3, 12, 24, 72, 168];
  * say it is planned. A window already in force is replaced rather than stacked.
  */
 export async function startMaintenance(formData: FormData) {
-  const { user, target } = await ownedTarget(String(formData.get("target_id") ?? ""));
+  const { user, target } = await readableTarget(String(formData.get("target_id") ?? ""));
   const back = `/projects/${target.project_id}`;
   const hours = Number(formData.get("hours"));
   if (!MAINTENANCE_HOURS.includes(hours)) fail(back, "Pick how long the maintenance lasts.");
@@ -666,7 +689,7 @@ export async function startMaintenance(formData: FormData) {
 }
 
 export async function endMaintenance(formData: FormData) {
-  const { target } = await ownedTarget(String(formData.get("target_id") ?? ""));
+  const { target } = await readableTarget(String(formData.get("target_id") ?? ""));
   const now = new Date().toISOString();
   await createAdminClient()
     .from("maintenance_windows")

@@ -19,7 +19,13 @@ type Target = {
   interval_seconds: number;
   label: string | null;
 };
-type Project = { id: string; name: string; last_commit_at: string | null; targets: Target[] };
+type Project = {
+  id: string;
+  user_id: string;
+  name: string;
+  last_commit_at: string | null;
+  targets: Target[];
+};
 
 const DAYS = 30;
 /** Render's 15-minute sleep is reset by every check, so only day-long windows can run out. */
@@ -52,7 +58,7 @@ export default async function DashboardPage() {
     supabase
       .from("projects")
       .select(
-        "id, name, last_commit_at, targets (id, url, platform, heartbeat_type, interval_seconds, label)",
+        "id, user_id, name, last_commit_at, targets (id, url, platform, heartbeat_type, interval_seconds, label)",
       )
       .eq("archived", false)
       .order("created_at", { ascending: true }),
@@ -113,6 +119,7 @@ export default async function DashboardPage() {
       repo,
       owner: owner && !oneOwner ? owner : null,
       touched: p.last_commit_at ? ago(p.last_commit_at, now) : null,
+      shared: p.user_id !== user.id,
       worst,
       needsYou: worst !== null && TROUBLE.includes(worst),
       backends: [...p.targets]

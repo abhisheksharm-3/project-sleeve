@@ -28,7 +28,7 @@ export default async function ImportPage({ searchParams }: PageProps<"/import">)
   const canConnect = githubAppConfig() !== null;
   const [{ repos, problem }, { data: existing }] = await Promise.all([
     loadRepos(user.id),
-    supabase.from("projects").select("github_id"),
+    supabase.from("projects").select("github_id").eq("user_id", user.id),
   ]);
   const imported = new Set((existing ?? []).map((p) => p.github_id));
 

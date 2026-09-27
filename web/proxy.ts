@@ -49,6 +49,8 @@ export async function proxy(request: NextRequest) {
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.search = "";
+    if (path.startsWith("/invite/")) url.searchParams.set("next", path);
     return NextResponse.redirect(url);
   }
 

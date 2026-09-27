@@ -12,8 +12,10 @@ import { loadHealth } from "@/lib/load-health";
 import { isRestoreLink } from "@/lib/probe";
 import type { RepoScan } from "@/lib/repo-scan";
 import { requireUser } from "@/lib/session";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { FoundPanel } from "./found-panel";
 import { MaintenanceControl } from "./maintenance-control";
+import { PeoplePanel } from "./people-panel";
 import { SharePanel } from "./share-panel";
 import { AddTarget, type Prefill } from "./target-forms";
 
@@ -24,7 +26,6 @@ type Target = {
   platform: string;
   heartbeat_type: string;
   interval_seconds: number;
-  secret: string | null;
   platform_ref: string | null;
   method: string;
   auto_restore: boolean;
@@ -94,7 +95,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
   const { data: project } = await supabase
     .from("projects")
     .select(
-      "id, name, repo_url, github_id, scan, scanned_at, public, targets (id, url, platform, heartbeat_type, interval_seconds, secret, platform_ref, method, auto_restore, label)",
+      "id, user_id, name, repo_url, github_id, scan, scanned_at, public, targets (id, url, platform, heartbeat_type, interval_seconds, platform_ref, method, auto_restore, label)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -109,7 +110,12 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
     ),
   ]);
   const now = Date.now();
+  const isOwner = project.user_id === user.id;
   const newTarget = targets.find((t) => t.id === added);
+  const { data: newSecret } =
+    isOwner && newTarget?.platform === "custom" && newTarget.heartbeat_type === "db_query"
+      ? await createAdminClient().from("targets").select("secret").eq("id", newTarget.id).single()
+      : { data: null };
   const [owner, repo] = project.name.includes("/") ? project.name.split("/") : ["", project.name];
   const rows = targets.map((t) => health.get(t.id)).filter((h): h is Health => !!h);
   const rate = passRate(rows);
@@ -220,14 +226,15 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
         )}
         {newTarget?.platform === "custom" &&
           newTarget.heartbeat_type === "db_query" &&
-          newTarget.secret && <Snippet secret={newTarget.secret} />}
+          newSecret?.secret && <Snippet secret={newSecret.secret} />}
 
         <section className="mt-12">
           <h2 className="text-xl font-semibold">What we keep awake</h2>
           {targets.length === 0 ? (
             <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">
-              Nothing yet. Add the backend that pauses when this project goes quiet. That is usually
-              its database.
+              {isOwner
+                ? "Nothing yet. Add the backend that pauses when this project goes quiet. That is usually its database."
+                : "Nothing is kept awake here yet."}
             </p>
           ) : (
             <ul className="mt-2 border-t border-line">
@@ -239,15 +246,17 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
                   days={days.get(t.id) ?? []}
                   now={now}
                   autoRestoreControl={
-                    <form action={stopAutoRestore}>
-                      <input type="hidden" name="target_id" value={t.id} />
-                      <button
-                        type="submit"
-                        className="underline decoration-line underline-offset-4 hover:text-dead"
-                      >
-                        Turn off
-                      </button>
-                    </form>
+                    isOwner && (
+                      <form action={stopAutoRestore}>
+                        <input type="hidden" name="target_id" value={t.id} />
+                        <button
+                          type="submit"
+                          className="underline decoration-line underline-offset-4 hover:text-dead"
+                        >
+                          Turn off
+                        </button>
+                      </form>
+                    )
                   }
                 >
                   <MaintenanceControl targetId={t.id} active={maintenance.has(t.id)} />
@@ -257,41 +266,48 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
                       Check now
                     </button>
                   </form>
-                  <form action={removeTarget}>
-                    <input type="hidden" name="target_id" value={t.id} />
-                    <button
-                      type="submit"
-                      className={`${ROW_ACTION} text-muted hover:border-dead/60 hover:text-dead`}
-                    >
-                      Remove
-                    </button>
-                  </form>
+                  {isOwner && (
+                    <form action={removeTarget}>
+                      <input type="hidden" name="target_id" value={t.id} />
+                      <button
+                        type="submit"
+                        className={`${ROW_ACTION} text-muted hover:border-dead/60 hover:text-dead`}
+                      >
+                        Remove
+                      </button>
+                    </form>
+                  )}
                 </TargetCard>
               ))}
             </ul>
           )}
         </section>
 
-        <FoundPanel
-          projectId={project.id}
-          scan={(project.scan as RepoScan | null) ?? null}
-          scannedAt={project.scanned_at}
-          fromGithub={project.github_id !== null}
-          keptUrls={targets.map((t) => t.url)}
-        />
+        {isOwner && (
+          <>
+            <FoundPanel
+              projectId={project.id}
+              scan={(project.scan as RepoScan | null) ?? null}
+              scannedAt={project.scanned_at}
+              fromGithub={project.github_id !== null}
+              keptUrls={targets.map((t) => t.url)}
+            />
 
-        <section id="add" className="mt-16 scroll-mt-8">
-          <h2 className="text-xl font-semibold">Add a backend</h2>
-          <p className="mt-1 mb-5 text-[15px] text-muted">Where does this project run?</p>
-          <AddTarget
-            kind={typeof add === "string" ? add : undefined}
-            projectId={project.id}
-            minInterval={limits.minInterval()}
-            heartbeatTypes={limits.allowedHeartbeatTypes()}
-            prefill={prefillFrom(query)}
-          />
-        </section>
-        <SharePanel projectId={project.id} isPublic={project.public} />
+            <section id="add" className="mt-16 scroll-mt-8">
+              <h2 className="text-xl font-semibold">Add a backend</h2>
+              <p className="mt-1 mb-5 text-[15px] text-muted">Where does this project run?</p>
+              <AddTarget
+                kind={typeof add === "string" ? add : undefined}
+                projectId={project.id}
+                minInterval={limits.minInterval()}
+                heartbeatTypes={limits.allowedHeartbeatTypes()}
+                prefill={prefillFrom(query)}
+              />
+            </section>
+            <SharePanel projectId={project.id} isPublic={project.public} />
+          </>
+        )}
+        <PeoplePanel projectId={project.id} ownerId={project.user_id} viewerId={user.id} />
       </main>
     </div>
   );

@@ -25,7 +25,7 @@ async function ownedPage(formData: FormData, field = "page_id") {
   const id = String(formData.get(field) ?? "");
   const { data: page } = await supabase
     .from("status_pages")
-    .select("id, slug")
+    .select("id, slug, user_id")
     .eq("id", id)
     .maybeSingle();
   if (!page) fail("/status-pages", "That status page is not yours.");
@@ -57,7 +57,8 @@ export async function createStatusPage(formData: FormData) {
 
 /**
  * Saves settings and the backend list in one go. Backends come back as `target` values in
- * the order the form lists them, and only ones the user can read through RLS are kept.
+ * the order the form lists them, and only ones in the user's own projects are kept: a
+ * shared project's backends are not the member's to publish.
  */
 export async function saveStatusPage(formData: FormData) {
   const { page, supabase, editor } = await ownedPage(formData);
@@ -72,7 +73,11 @@ export async function saveStatusPage(formData: FormData) {
 
   const chosen = [...new Set(formData.getAll("target").map(String))];
   const { data: owned } = chosen.length
-    ? await supabase.from("targets").select("id").in("id", chosen)
+    ? await supabase
+        .from("targets")
+        .select("id, projects!inner (user_id)")
+        .in("id", chosen)
+        .eq("projects.user_id", page.user_id)
     : { data: [] };
   const ownedIds = new Set((owned ?? []).map((t) => t.id));
   const items = chosen
