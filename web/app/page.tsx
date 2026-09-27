@@ -50,43 +50,47 @@ const LEGEND = [
 export default function LandingPage() {
   return (
     <div className="flex min-h-full flex-1 flex-col bg-gradient-to-b from-sky via-ink to-ink">
-      <header className={`flex items-center gap-2.5 py-5 ${PAD}`}>
-        <Window state="alive" size="sm" />
-        <span className="text-[15px] font-semibold tracking-tight">ProjectSleeve</span>
-        <Link
-          href="/login"
-          className="ml-auto text-sm text-muted transition-colors hover:text-text"
-        >
-          Sign in
-        </Link>
-      </header>
+      <div className="flex h-svh min-h-[34rem] flex-col">
+        <header className={`flex items-center gap-2.5 py-5 ${PAD}`}>
+          <Window state="alive" size="sm" />
+          <span className="text-[15px] font-semibold tracking-tight">ProjectSleeve</span>
+          <Link
+            href="/login"
+            className="ml-auto text-sm text-muted transition-colors hover:text-text"
+          >
+            Sign in
+          </Link>
+        </header>
 
-      <main className="flex-1">
-        <section className={`pt-16 sm:pt-24 ${PAD}`}>
-          <h1 className="max-w-4xl text-5xl leading-[1.02] font-semibold sm:text-7xl">
-            Keeping the lights on for the projects you are not touching.
-          </h1>
-          <p className="mt-8 max-w-xl text-lg leading-relaxed text-muted">
-            Supabase pauses a free project after a week of quiet. Render sleeps after fifteen
-            minutes. We check each backend the way its platform actually counts, on a schedule that
-            never switches itself off.
-          </p>
-          <div className="mt-10 flex flex-wrap items-center gap-5">
-            <Link
-              href="/login"
-              className="rounded-full bg-alive px-6 py-3 text-[15px] font-semibold text-ink transition-colors hover:bg-warn"
-            >
-              Continue with GitHub
-            </Link>
-            <span className="text-sm text-muted">
-              Reads your public repositories. Never your code.
-            </span>
+        <section className={`flex min-h-0 flex-1 flex-col pt-[6vh] ${PAD}`}>
+          <div className="shrink-0">
+            <h1 className="max-w-4xl text-[clamp(2.5rem,min(7vw,9vh),5rem)] leading-[1.02] font-semibold">
+              Keeping the lights on for the projects you are not touching.
+            </h1>
+            <p className="mt-[3vh] max-w-xl text-lg leading-relaxed text-muted">
+              Supabase pauses a free project after a week of quiet. Render sleeps after fifteen
+              minutes. We check each backend the way its platform actually counts, on a schedule
+              that never switches itself off.
+            </p>
+            <div className="mt-[4vh] flex flex-wrap items-center gap-5">
+              <Link
+                href="/login"
+                className="rounded-full bg-alive px-6 py-3 text-[15px] font-semibold text-ink transition-colors hover:bg-warn"
+              >
+                Continue with GitHub
+              </Link>
+              <span className="text-sm text-muted">
+                Reads your public repositories. Never your code.
+              </span>
+            </div>
           </div>
-          <div className="mt-20 border-b-2 border-line">
+          <div className="mt-[5vh] flex min-h-0 flex-1 items-end overflow-hidden border-b-2 border-line">
             <Skyline />
           </div>
         </section>
+      </div>
 
+      <main className="flex-1">
         <section className={`py-24 ${PAD}`}>
           <h2 className="max-w-2xl text-3xl font-semibold sm:text-4xl">
             Why the lights go out anyway
