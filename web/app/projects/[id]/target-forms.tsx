@@ -157,9 +157,11 @@ export function TargetForms({
             there.
           </li>
           <li>
-            Create a table with id <span className="font-mono text-text">{APPWRITE_TABLE_ID}</span>,
-            and add a string column <span className="font-mono text-text">{APPWRITE_COLUMN}</span>{" "}
-            of size 40. We only ever write one row to it.
+            Create a table and set its <span className="font-mono text-text">Table ID</span>, not
+            just its name, to <span className="font-mono text-text">{APPWRITE_TABLE_ID}</span>.
+            Appwrite generates a random ID unless you edit it. Add a string column{" "}
+            <span className="font-mono text-text">{APPWRITE_COLUMN}</span> of size 40. We only ever
+            write one row to it.
           </li>
           <li>
             Overview → API keys → create a key with{" "}
