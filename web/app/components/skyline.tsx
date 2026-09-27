@@ -4,7 +4,7 @@
  * prerendered page and the browser agree.
  *
  * Buildings keep a fixed size. The row wraps and is clipped to exactly one building's
- * height, so any building that does not fit drops out whole instead of being squeezed or
+ * height (every building sits in a slot that tall), so any building that does not fit drops out whole instead of being squeezed or
  * sliced at the edge, and the ones that fit spread to fill the width.
  */
 const BUILDINGS = [
@@ -55,32 +55,37 @@ export function Skyline() {
       {BUILDINGS.map((b, bi) => (
         <div
           key={b.id}
-          className="shrink-0 rounded-t-lg border border-b-0 border-line bg-surface"
-          style={{ padding: PAD }}
+          className="flex shrink-0 flex-col justify-end"
+          style={{ height: ROW_HEIGHT }}
         >
           <div
-            className="grid"
-            style={{ gridTemplateColumns: `repeat(${b.cols}, ${WINDOW}px)`, gap: GAP }}
+            className="rounded-t-lg border border-b-0 border-line bg-surface"
+            style={{ padding: PAD }}
           >
-            {Array.from({ length: b.cols * b.rows }, (_, i) => {
-              const key = `${bi}-${Math.floor(i / b.cols)}-${i % b.cols}`;
-              const look =
-                key === FLICKER
-                  ? "window-lit flicker"
-                  : key === DARK
-                    ? "window-dark ring-1 ring-dead/70 ring-inset"
-                    : UNLIT.has(key)
-                      ? "window-dark"
-                      : "window-lit switch-on";
-              const delay = look.includes("switch-on") ? `${(order++ * 45) % 2600}ms` : undefined;
-              return (
-                <span
-                  key={key}
-                  className={`h-5 rounded-[3px] ${look}`}
-                  style={delay ? { animationDelay: delay } : undefined}
-                />
-              );
-            })}
+            <div
+              className="grid"
+              style={{ gridTemplateColumns: `repeat(${b.cols}, ${WINDOW}px)`, gap: GAP }}
+            >
+              {Array.from({ length: b.cols * b.rows }, (_, i) => {
+                const key = `${bi}-${Math.floor(i / b.cols)}-${i % b.cols}`;
+                const look =
+                  key === FLICKER
+                    ? "window-lit flicker"
+                    : key === DARK
+                      ? "window-dark ring-1 ring-dead/70 ring-inset"
+                      : UNLIT.has(key)
+                        ? "window-dark"
+                        : "window-lit switch-on";
+                const delay = look.includes("switch-on") ? `${(order++ * 45) % 2600}ms` : undefined;
+                return (
+                  <span
+                    key={key}
+                    className={`h-5 rounded-[3px] ${look}`}
+                    style={delay ? { animationDelay: delay } : undefined}
+                  />
+                );
+              })}
+            </div>
           </div>
         </div>
       ))}
